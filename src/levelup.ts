@@ -33,139 +33,139 @@ function weaponLevel(weapons: AnyWeapon[], name: string): number {
 }
 
 const UPGRADE_POOL: Upgrade[] = [
-  // ── Magic Bolt ─────────────────────────────────────────────────────────────
+  // ── Laser ──────────────────────────────────────────────────────────────────
   {
-    id: 'bolt_damage', label: '⚡ Magic Bolt – Damage Up', desc: '+30% bolt damage',
-    apply: (w) => upgradeWeapon(w, 'Magic Bolt', 'damage'),
-    requires: (w) => w.some(x => x.name === 'Magic Bolt' && !x.isEvolution),
+    id: 'bolt_damage', label: '🔵 Laser – Damage Up', desc: '+30% laser damage',
+    apply: (w) => upgradeWeapon(w, 'Laser', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Laser' && !x.isEvolution),
   },
   {
-    id: 'bolt_rate', label: '⚡ Magic Bolt – Fire Rate Up', desc: '+25% fire rate',
-    apply: (w) => upgradeWeapon(w, 'Magic Bolt', 'rate'),
-    requires: (w) => w.some(x => x.name === 'Magic Bolt' && !x.isEvolution),
+    id: 'bolt_rate', label: '🔵 Laser – Fire Rate Up', desc: '+25% fire rate',
+    apply: (w) => upgradeWeapon(w, 'Laser', 'rate'),
+    requires: (w) => w.some(x => x.name === 'Laser' && !x.isEvolution),
   },
   {
-    id: 'bolt_pierce', label: '⚡ Magic Bolt – Pierce', desc: 'Bolts pierce through +1 enemy',
-    apply: (w) => upgradeWeapon(w, 'Magic Bolt', 'pierce'),
-    requires: (w) => w.some(x => x.name === 'Magic Bolt' && !x.isEvolution),
+    id: 'bolt_pierce', label: '🔵 Laser – Pierce', desc: 'Bolts pierce through +1 enemy',
+    apply: (w) => upgradeWeapon(w, 'Laser', 'pierce'),
+    requires: (w) => w.some(x => x.name === 'Laser' && !x.isEvolution),
   },
-  // ── Whip ───────────────────────────────────────────────────────────────────
+  // ── Plasma Whip ────────────────────────────────────────────────────────────
   {
-    id: 'add_whip', label: '🌀 Unlock Whip', desc: 'New weapon: sweeping arc melee attack',
-    apply: (_w, add) => add('Whip'),
-    requires: (w) => !w.some(x => x.name === 'Whip') && !w.some(x => x.name === 'Thunder Strike'),
-  },
-  {
-    id: 'whip_damage', label: '🌀 Whip – Damage Up', desc: '+30% whip damage',
-    apply: (w) => upgradeWeapon(w, 'Whip', 'damage'),
-    requires: (w) => w.some(x => x.name === 'Whip' && !x.isEvolution),
+    id: 'add_whip', label: '⚡ Unlock Plasma Whip', desc: 'New weapon: sweeping plasma arc',
+    apply: (_w, add) => add('Plasma Whip'),
+    requires: (w) => !w.some(x => x.name === 'Plasma Whip') && !w.some(x => x.name === 'Beam Lash'),
   },
   {
-    id: 'whip_range', label: '🌀 Whip – Range Up', desc: '+30px whip range',
-    apply: (w) => upgradeWeapon(w, 'Whip', 'range'),
-    requires: (w) => w.some(x => x.name === 'Whip' && !x.isEvolution),
-  },
-  // ── Fireball ───────────────────────────────────────────────────────────────
-  {
-    id: 'add_fireball', label: '🔥 Unlock Fireball', desc: 'New weapon: slow explosive orb',
-    apply: (_w, add) => add('Fireball'),
-    requires: (w) => !w.some(x => x.name === 'Fireball') && !w.some(x => x.name === 'Void Orb') && !w.some(x => x.name === 'Inferno'),
+    id: 'whip_damage', label: '⚡ Plasma Whip – Damage Up', desc: '+30% whip damage',
+    apply: (w) => upgradeWeapon(w, 'Plasma Whip', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Plasma Whip' && !x.isEvolution),
   },
   {
-    id: 'fireball_damage', label: '🔥 Fireball – Damage Up', desc: '+35% fireball damage',
-    apply: (w) => upgradeWeapon(w, 'Fireball', 'damage'),
-    requires: (w) => w.some(x => x.name === 'Fireball' && !x.isEvolution),
+    id: 'whip_range', label: '⚡ Plasma Whip – Range Up', desc: '+30px whip range',
+    apply: (w) => upgradeWeapon(w, 'Plasma Whip', 'range'),
+    requires: (w) => w.some(x => x.name === 'Plasma Whip' && !x.isEvolution),
+  },
+  // ── Plasma Bomb ────────────────────────────────────────────────────────────
+  {
+    id: 'add_fireball', label: '💠 Unlock Plasma Bomb', desc: 'New weapon: slow explosive orb',
+    apply: (_w, add) => add('Plasma Bomb'),
+    requires: (w) => !w.some(x => x.name === 'Plasma Bomb') && !w.some(x => x.name === 'Dark Matter') && !w.some(x => x.name === 'Nova Burst'),
   },
   {
-    id: 'fireball_rate', label: '🔥 Fireball – Fire Rate Up', desc: '+25% fire rate',
-    apply: (w) => upgradeWeapon(w, 'Fireball', 'rate'),
-    requires: (w) => w.some(x => x.name === 'Fireball' && !x.isEvolution),
+    id: 'fireball_damage', label: '💠 Plasma Bomb – Damage Up', desc: '+35% bomb damage',
+    apply: (w) => upgradeWeapon(w, 'Plasma Bomb', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Plasma Bomb' && !x.isEvolution),
   },
   {
-    id: 'fireball_radius', label: '🔥 Fireball – Blast Radius Up', desc: '+30px explosion radius',
-    apply: (w) => upgradeWeapon(w, 'Fireball', 'radius'),
-    requires: (w) => w.some(x => x.name === 'Fireball' && !x.isEvolution),
-  },
-  // ── Lightning ──────────────────────────────────────────────────────────────
-  {
-    id: 'add_lightning', label: '🌩 Unlock Lightning', desc: 'New weapon: chain zap hitting multiple enemies',
-    apply: (_w, add) => add('Lightning'),
-    requires: (w) => !w.some(x => x.name === 'Lightning'),
+    id: 'fireball_rate', label: '💠 Plasma Bomb – Fire Rate Up', desc: '+25% fire rate',
+    apply: (w) => upgradeWeapon(w, 'Plasma Bomb', 'rate'),
+    requires: (w) => w.some(x => x.name === 'Plasma Bomb' && !x.isEvolution),
   },
   {
-    id: 'lightning_damage', label: '🌩 Lightning – Damage Up', desc: '+30% lightning damage',
-    apply: (w) => upgradeWeapon(w, 'Lightning', 'damage'),
-    requires: (w) => w.some(x => x.name === 'Lightning' && !x.isEvolution),
+    id: 'fireball_radius', label: '💠 Plasma Bomb – Blast Radius Up', desc: '+30px explosion radius',
+    apply: (w) => upgradeWeapon(w, 'Plasma Bomb', 'radius'),
+    requires: (w) => w.some(x => x.name === 'Plasma Bomb' && !x.isEvolution),
+  },
+  // ── Ion Chain ──────────────────────────────────────────────────────────────
+  {
+    id: 'add_lightning', label: '🔗 Unlock Ion Chain', desc: 'New weapon: chain zap hitting multiple enemies',
+    apply: (_w, add) => add('Ion Chain'),
+    requires: (w) => !w.some(x => x.name === 'Ion Chain'),
   },
   {
-    id: 'lightning_chains', label: '🌩 Lightning – Extra Chain', desc: 'Zap hits +1 more enemy',
-    apply: (w) => upgradeWeapon(w, 'Lightning', 'chains'),
-    requires: (w) => w.some(x => x.name === 'Lightning' && !x.isEvolution),
+    id: 'lightning_damage', label: '🔗 Ion Chain – Damage Up', desc: '+30% chain damage',
+    apply: (w) => upgradeWeapon(w, 'Ion Chain', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Ion Chain' && !x.isEvolution),
   },
   {
-    id: 'lightning_rate', label: '🌩 Lightning – Fire Rate Up', desc: '+20% zap rate',
-    apply: (w) => upgradeWeapon(w, 'Lightning', 'rate'),
-    requires: (w) => w.some(x => x.name === 'Lightning' && !x.isEvolution),
-  },
-  // ── Aura ───────────────────────────────────────────────────────────────────
-  {
-    id: 'add_aura', label: '💜 Unlock Aura', desc: 'New weapon: pulsing damage ring around player',
-    apply: (_w, add) => add('Aura'),
-    requires: (w) => !w.some(x => x.name === 'Aura') && !w.some(x => x.name === 'Inferno'),
+    id: 'lightning_chains', label: '🔗 Ion Chain – Extra Link', desc: 'Zap hits +1 more enemy',
+    apply: (w) => upgradeWeapon(w, 'Ion Chain', 'chains'),
+    requires: (w) => w.some(x => x.name === 'Ion Chain' && !x.isEvolution),
   },
   {
-    id: 'aura_damage', label: '💜 Aura – Damage Up', desc: '+30% aura damage',
-    apply: (w) => upgradeWeapon(w, 'Aura', 'damage'),
-    requires: (w) => w.some(x => x.name === 'Aura' && !x.isEvolution),
+    id: 'lightning_rate', label: '🔗 Ion Chain – Fire Rate Up', desc: '+20% zap rate',
+    apply: (w) => upgradeWeapon(w, 'Ion Chain', 'rate'),
+    requires: (w) => w.some(x => x.name === 'Ion Chain' && !x.isEvolution),
+  },
+  // ── Force Field ────────────────────────────────────────────────────────────
+  {
+    id: 'add_aura', label: '🛡 Unlock Force Field', desc: 'New weapon: pulsing damage ring',
+    apply: (_w, add) => add('Force Field'),
+    requires: (w) => !w.some(x => x.name === 'Force Field') && !w.some(x => x.name === 'Nova Burst'),
   },
   {
-    id: 'aura_range', label: '💜 Aura – Range Up', desc: '+25px aura range',
-    apply: (w) => upgradeWeapon(w, 'Aura', 'range'),
-    requires: (w) => w.some(x => x.name === 'Aura' && !x.isEvolution),
+    id: 'aura_damage', label: '🛡 Force Field – Damage Up', desc: '+30% field damage',
+    apply: (w) => upgradeWeapon(w, 'Force Field', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Force Field' && !x.isEvolution),
   },
   {
-    id: 'aura_rate', label: '💜 Aura – Pulse Rate Up', desc: '+25% pulse rate',
-    apply: (w) => upgradeWeapon(w, 'Aura', 'rate'),
-    requires: (w) => w.some(x => x.name === 'Aura' && !x.isEvolution),
+    id: 'aura_range', label: '🛡 Force Field – Range Up', desc: '+25px field range',
+    apply: (w) => upgradeWeapon(w, 'Force Field', 'range'),
+    requires: (w) => w.some(x => x.name === 'Force Field' && !x.isEvolution),
+  },
+  {
+    id: 'aura_rate', label: '🛡 Force Field – Pulse Rate Up', desc: '+25% pulse rate',
+    apply: (w) => upgradeWeapon(w, 'Force Field', 'rate'),
+    requires: (w) => w.some(x => x.name === 'Force Field' && !x.isEvolution),
   },
   // ── Player stats ───────────────────────────────────────────────────────────
   {
-    id: 'player_speed', label: '👟 Speed Up', desc: '+20% movement speed',
+    id: 'player_speed', label: '🚀 Thruster Up', desc: '+20% movement speed',
     apply: (_w, _add, player) => { player.speed *= 1.2; },
     requires: () => true,
   },
   {
-    id: 'player_hp', label: '❤️ Max HP Up', desc: '+25 max HP and heal 25',
+    id: 'player_hp', label: '🔋 Shield Capacity Up', desc: '+25 max shield and repair 25',
     apply: (_w, _add, player) => { player.maxHp += 25; player.hp = Math.min(player.hp + 25, player.maxHp); },
     requires: () => true,
   },
   // ── Evolutions ─────────────────────────────────────────────────────────────
   {
     id: 'evo_thunder_strike',
-    label: '⚡🌀 EVOLVE: Thunder Strike',
-    desc: 'Merge Magic Bolt lv3 + Whip lv2 → simultaneous bolt & arc',
-    apply: (_w, add, _p, remove) => { remove('Magic Bolt'); remove('Whip'); add('Thunder Strike'); },
+    label: '🔵⚡ EVOLVE: Beam Lash',
+    desc: 'Merge Laser lv3 + Plasma Whip lv2 → simultaneous bolt & arc',
+    apply: (_w, add, _p, remove) => { remove('Laser'); remove('Plasma Whip'); add('Beam Lash'); },
     requires: (w) =>
-      weaponLevel(w, 'Magic Bolt') >= 3 && weaponLevel(w, 'Whip') >= 2 &&
-      !w.some(x => x.name === 'Thunder Strike'),
+      weaponLevel(w, 'Laser') >= 3 && weaponLevel(w, 'Plasma Whip') >= 2 &&
+      !w.some(x => x.name === 'Beam Lash'),
   },
   {
     id: 'evo_void_orb',
-    label: '⚡🔥 EVOLVE: Void Orb',
-    desc: 'Merge Magic Bolt lv3 + Fireball lv2 → massive piercing void orb',
-    apply: (_w, add, _p, remove) => { remove('Magic Bolt'); remove('Fireball'); add('Void Orb'); },
+    label: '🔵💠 EVOLVE: Dark Matter',
+    desc: 'Merge Laser lv3 + Plasma Bomb lv2 → massive piercing singularity',
+    apply: (_w, add, _p, remove) => { remove('Laser'); remove('Plasma Bomb'); add('Dark Matter'); },
     requires: (w) =>
-      weaponLevel(w, 'Magic Bolt') >= 3 && weaponLevel(w, 'Fireball') >= 2 &&
-      !w.some(x => x.name === 'Void Orb'),
+      weaponLevel(w, 'Laser') >= 3 && weaponLevel(w, 'Plasma Bomb') >= 2 &&
+      !w.some(x => x.name === 'Dark Matter'),
   },
   {
     id: 'evo_inferno',
-    label: '💜🔥 EVOLVE: Inferno',
-    desc: 'Merge Aura lv2 + Fireball lv3 → wide aura + 6-way fireballs',
-    apply: (_w, add, _p, remove) => { remove('Aura'); remove('Fireball'); add('Inferno'); },
+    label: '🛡💠 EVOLVE: Nova Burst',
+    desc: 'Merge Force Field lv2 + Plasma Bomb lv3 → wide field + 6-way bombs',
+    apply: (_w, add, _p, remove) => { remove('Force Field'); remove('Plasma Bomb'); add('Nova Burst'); },
     requires: (w) =>
-      weaponLevel(w, 'Aura') >= 2 && weaponLevel(w, 'Fireball') >= 3 &&
-      !w.some(x => x.name === 'Inferno'),
+      weaponLevel(w, 'Force Field') >= 2 && weaponLevel(w, 'Plasma Bomb') >= 3 &&
+      !w.some(x => x.name === 'Nova Burst'),
   },
 ];
 

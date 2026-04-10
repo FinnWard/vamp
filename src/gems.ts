@@ -14,11 +14,11 @@ const COMPACT_INTERVAL = 0.4;
 const MERGE_DIST_SQ = 55 * 55;
 
 function gemColor(value: number): string {
-  if (value >= 25) return '#ffb300'; // gold
-  if (value >= 10) return '#ff6090'; // pink/red
-  if (value >= 5)  return '#b39ddb'; // purple
-  if (value >= 2)  return '#ce93d8'; // light purple
-  return '#69f0ae';                  // green
+  if (value >= 25) return '#ffd740'; // gold
+  if (value >= 10) return '#e040fb'; // bright magenta
+  if (value >= 5)  return '#40c4ff'; // sky blue
+  if (value >= 2)  return '#00e5ff'; // cyan
+  return '#69ffdf';                  // teal-mint
 }
 
 function gemRadius(value: number): number {

@@ -131,10 +131,11 @@ function update(dt: number): void {
 
 // ─── Render ───────────────────────────────────────────────────────────────────
 function render(): void {
-  ctx.fillStyle = '#0d1a0d';
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = '#00000e';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  camera.drawGrid(ctx);
+  camera.drawStarField(ctx);
 
   gems.draw(ctx, camera);
   spawner.draw(ctx, camera);

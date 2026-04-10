@@ -3,20 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vamp</title>
+  <title>Vamp – Space Survivors</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      background: #000;
+      background: #00000e;
       overflow: hidden;
-      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-family: 'Press Start 2P', monospace;
     }
 
     #gameCanvas {
       display: block;
       position: fixed;
       top: 0; left: 0;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
     }
 
     /* ── Overlays ──────────────────────────────────────────────── */
@@ -27,9 +32,8 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: rgba(0, 0, 0, 0.72);
+      background: rgba(0, 0, 18, 0.82);
       z-index: 10;
-      transition: opacity 0.15s;
     }
 
     .overlay.hidden {
@@ -38,91 +42,97 @@
 
     /* ── Level-up UI ───────────────────────────────────────────── */
     #levelUpOverlay h2 {
-      color: #69f0ae;
-      font-size: 2rem;
-      margin-bottom: 8px;
-      text-shadow: 0 0 20px #69f0ae88;
-      letter-spacing: 2px;
+      color: #00e5ff;
+      font-size: 1.4rem;
+      margin-bottom: 10px;
+      text-shadow: 0 0 20px #00e5ff88;
+      letter-spacing: 3px;
     }
 
     #levelUpOverlay p {
-      color: #aaa;
+      color: #4fc3f7;
       margin-bottom: 28px;
-      font-size: 0.95rem;
+      font-size: 0.6rem;
+      letter-spacing: 2px;
     }
 
     #upgradeCards {
       display: flex;
-      gap: 16px;
+      gap: 14px;
       flex-wrap: wrap;
       justify-content: center;
     }
 
     .upgrade-card {
-      width: 180px;
-      padding: 20px 16px;
-      background: #0d1a0d;
-      border: 2px solid #2e7d32;
-      border-radius: 10px;
+      width: 190px;
+      padding: 18px 14px;
+      background: #020818;
+      border: 2px solid #0d47a1;
       cursor: pointer;
-      transition: border-color 0.15s, transform 0.1s, background 0.15s;
+      transition: border-color 0.1s, transform 0.1s, background 0.1s;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
       text-align: center;
+      image-rendering: pixelated;
     }
 
     .upgrade-card:hover {
-      border-color: #69f0ae;
-      background: #1a2e1a;
-      transform: translateY(-4px);
+      border-color: #00e5ff;
+      background: #050f2a;
+      transform: translateY(-3px);
+      box-shadow: 0 0 14px #00e5ff44;
     }
 
     .card-label {
-      color: #fff;
-      font-size: 0.95rem;
-      font-weight: bold;
-      line-height: 1.3;
+      color: #e0f7fa;
+      font-size: 0.6rem;
+      line-height: 1.5;
     }
 
     .card-desc {
-      color: #81c784;
-      font-size: 0.8rem;
-      line-height: 1.4;
+      color: #4dd0e1;
+      font-size: 0.5rem;
+      line-height: 1.6;
     }
 
     /* ── Game Over UI ──────────────────────────────────────────── */
     #gameOverOverlay h1 {
-      color: #e53935;
-      font-size: 3rem;
-      text-shadow: 0 0 30px #e5393588;
+      color: #ff1744;
+      font-size: 1.8rem;
+      text-shadow: 0 0 30px #ff174488;
       letter-spacing: 4px;
-      margin-bottom: 14px;
+      margin-bottom: 18px;
+      line-height: 1.4;
+      text-align: center;
     }
 
     #gameOverStats {
-      color: #ccc;
-      font-size: 1.1rem;
-      margin-bottom: 32px;
-      letter-spacing: 1px;
+      color: #90caf9;
+      font-size: 0.6rem;
+      margin-bottom: 36px;
+      letter-spacing: 2px;
+      text-align: center;
+      line-height: 2;
     }
 
     #restartBtn {
-      padding: 12px 40px;
-      background: #e53935;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      font-size: 1.1rem;
-      font-weight: bold;
+      padding: 14px 36px;
+      background: #0d1b4b;
+      color: #00e5ff;
+      border: 2px solid #00e5ff;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.7rem;
       cursor: pointer;
-      letter-spacing: 1px;
-      transition: background 0.15s, transform 0.1s;
+      letter-spacing: 2px;
+      transition: background 0.1s, transform 0.1s, box-shadow 0.1s;
     }
 
     #restartBtn:hover {
-      background: #ff5252;
+      background: #00e5ff;
+      color: #000;
       transform: scale(1.04);
+      box-shadow: 0 0 16px #00e5ff88;
     }
   </style>
 </head>
@@ -132,16 +142,16 @@
 
   <!-- Level-up overlay -->
   <div id="levelUpOverlay" class="overlay hidden">
-    <h2>LEVEL UP!</h2>
-    <p>Choose an upgrade</p>
+    <h2>★ RANK UP! ★</h2>
+    <p>CHOOSE UPGRADE</p>
     <div id="upgradeCards"></div>
   </div>
 
   <!-- Game over overlay -->
   <div id="gameOverOverlay" class="overlay hidden">
-    <h1>YOU DIED</h1>
+    <h1>HULL BREACH</h1>
     <p id="gameOverStats"></p>
-    <button id="restartBtn">RESTART</button>
+    <button id="restartBtn">RESPAWN</button>
   </div>
 
   <script type="module" src="src/main.ts"></script>

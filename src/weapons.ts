@@ -55,7 +55,7 @@ class LightningFlash {
     if (this.done) return;
     const t = this.age / this.duration;
     ctx.save();
-    ctx.strokeStyle = '#ffe082'; ctx.shadowColor = '#ffe082'; ctx.shadowBlur = 14;
+    ctx.strokeStyle = '#00e5ff'; ctx.shadowColor = '#00e5ff'; ctx.shadowBlur = 14;
     ctx.lineWidth = 2.5; ctx.globalAlpha = 1 - t; ctx.setLineDash([4, 3]);
     for (const seg of this.segments) {
       const a = camera.worldToScreen(seg.x1, seg.y1);
@@ -66,9 +66,9 @@ class LightningFlash {
   }
 }
 
-// ─── Weapon: Magic Bolt ───────────────────────────────────────────────────────
+// ─── Weapon: Laser ───────────────────────────────────────────────────────────
 export class MagicBolt implements Weapon {
-  readonly name = 'Magic Bolt';
+  readonly name = 'Laser';
   readonly isEvolution = false;
   level = 1;
   cooldown = 0.8;
@@ -76,7 +76,7 @@ export class MagicBolt implements Weapon {
   speed = 380;
   projectileRadius = 6;
   pierce = 0;
-  private readonly color = '#ffee58';
+  private readonly color = '#00e5ff';
   private timer = 0;
 
   getStats(): string {
@@ -114,9 +114,9 @@ export class MagicBolt implements Weapon {
   }
 }
 
-// ─── Weapon: Whip ─────────────────────────────────────────────────────────────
+// ─── Weapon: Plasma Whip ─────────────────────────────────────────────────────
 export class Whip implements Weapon {
-  readonly name = 'Whip';
+  readonly name = 'Plasma Whip';
   readonly isEvolution = false;
   level = 1;
   cooldown = 1.2;
@@ -124,7 +124,7 @@ export class Whip implements Weapon {
   range = 120;
   private readonly arcAngle = Math.PI * 0.8;
   private readonly swingDuration = 0.18;
-  private readonly color = '#ef9a9a';
+  private readonly color = '#40c4ff';
   private timer = 0;
   private swingTimer = 0;
   private swinging = false;
@@ -215,25 +215,25 @@ class FireOrb {
       const dx = e.x - this.x, dy = e.y - this.y;
       if (Math.sqrt(dx * dx + dy * dy) < this.explosionRadius + e.radius) e.takeDamage(this.explosionDamage);
     }
-    this.effects.push(new ExplosionEffect(this.x, this.y, this.explosionRadius, 0.5, '#ff6f00'));
+    this.effects.push(new ExplosionEffect(this.x, this.y, this.explosionRadius, 0.5, '#00b0ff'));
   }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
     if (!this.alive) return;
     const s = camera.worldToScreen(this.x, this.y);
     ctx.save();
-    ctx.fillStyle = '#ff6f00'; ctx.shadowColor = '#ff9800'; ctx.shadowBlur = 18;
+    ctx.fillStyle = '#0091ea'; ctx.shadowColor = '#40c4ff'; ctx.shadowBlur = 18;
     ctx.beginPath(); ctx.arc(s.x, s.y, this.radius, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ffcc02';
+    ctx.fillStyle = '#80d8ff';
     ctx.beginPath(); ctx.arc(s.x - 5, s.y - 5, this.radius * 0.4, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
 }
 
-// ─── Weapon: Fireball ─────────────────────────────────────────────────────────
+// ─── Weapon: Plasma Bomb ─────────────────────────────────────────────────────
 
 export class Fireball implements Weapon {
-  readonly name = 'Fireball'; readonly isEvolution = false; level = 1;
+  readonly name = 'Plasma Bomb'; readonly isEvolution = false; level = 1;
   cooldown = 2.0; damage = 25; speed = 110;
   readonly orbRadius = 18; explosionRadius = 90;
   private timer = 0; private orbs: FireOrb[] = []; private effects: ExplosionEffect[] = [];
@@ -277,10 +277,10 @@ export class Fireball implements Weapon {
   }
 }
 
-// ─── Weapon: Lightning ────────────────────────────────────────────────────────
+// ─── Weapon: Ion Chain ────────────────────────────────────────────────────────
 
 export class Lightning implements Weapon {
-  readonly name = 'Lightning'; readonly isEvolution = false; level = 1;
+  readonly name = 'Ion Chain'; readonly isEvolution = false; level = 1;
   cooldown = 0.45; damage = 22; chains = 3;
   private timer = 0; private flashes: LightningFlash[] = [];
 
@@ -318,10 +318,10 @@ export class Lightning implements Weapon {
   }
 }
 
-// ─── Weapon: Aura ─────────────────────────────────────────────────────────────
+// ─── Weapon: Force Field ─────────────────────────────────────────────────────
 
 export class Aura implements Weapon {
-  readonly name = 'Aura'; readonly isEvolution = false; level = 1;
+  readonly name = 'Force Field'; readonly isEvolution = false; level = 1;
   cooldown = 1.5; damage = 20; range = 80;
   private timer = 0; private pulseEffects: ExplosionEffect[] = [];
 
@@ -344,25 +344,25 @@ export class Aura implements Weapon {
       const dx = e.x - player.x, dy = e.y - player.y;
       if (Math.sqrt(dx * dx + dy * dy) < this.range + e.radius) e.takeDamage(this.damage);
     }
-    this.pulseEffects.push(new ExplosionEffect(player.x, player.y, this.range, 0.45, '#ce93d8'));
+    this.pulseEffects.push(new ExplosionEffect(player.x, player.y, this.range, 0.45, '#40c4ff'));
   }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera, player: Player): void {
     const s = camera.worldToScreen(player.x, player.y);
     ctx.save();
-    ctx.strokeStyle = '#ce93d8'; ctx.globalAlpha = 0.18; ctx.lineWidth = 2;
+    ctx.strokeStyle = '#40c4ff'; ctx.globalAlpha = 0.18; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(s.x, s.y, this.range, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
     for (const fx of this.pulseEffects) fx.draw(ctx, camera);
   }
 }
 
-// ─── Evolution: Thunder Strike (MagicBolt lv3 + Whip lv2) ────────────────────
+// ─── Evolution: Beam Lash (Laser lv3 + Plasma Whip lv2) ──────────────────────
 
 export class ThunderStrike implements Weapon {
-  readonly name = 'Thunder Strike'; readonly isEvolution = true; level = 1;
+  readonly name = 'Beam Lash'; readonly isEvolution = true; level = 1;
   private cooldown = 0.5; private damage = 55; private speed = 420;
   private range = 160; private arcAngle = Math.PI * 0.9;
-  private readonly color = '#ffe082';
+  private readonly color = '#69ffdf';
   private timer = 0; private lastAngle = 0;
   private swingTimer = 0; private swinging = false; private readonly swingDuration = 0.2;
   private flashes: LightningFlash[] = [];
@@ -453,7 +453,7 @@ class VoidOrbProjectile {
       const dx = e.x - this.x, dy = e.y - this.y;
       if (Math.sqrt(dx * dx + dy * dy) < blastR + e.radius) e.takeDamage(this.damage * 3);
     }
-    this.effects.push(new ExplosionEffect(this.x, this.y, blastR, 0.7, '#b39ddb'));
+    this.effects.push(new ExplosionEffect(this.x, this.y, blastR, 0.7, '#e040fb'));
   }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
@@ -461,18 +461,18 @@ class VoidOrbProjectile {
     const s = camera.worldToScreen(this.x, this.y);
     const pulse = 1 + Math.sin(this.age * 6) * 0.12;
     ctx.save();
-    ctx.fillStyle = '#4a148c'; ctx.shadowColor = '#b39ddb'; ctx.shadowBlur = 22; ctx.globalAlpha = 0.92;
+    ctx.fillStyle = '#1a0033'; ctx.shadowColor = '#e040fb'; ctx.shadowBlur = 22; ctx.globalAlpha = 0.92;
     ctx.beginPath(); ctx.arc(s.x, s.y, this.radius * pulse, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#ce93d8'; ctx.lineWidth = 2; ctx.globalAlpha = 0.6;
+    ctx.strokeStyle = '#ea80fc'; ctx.lineWidth = 2; ctx.globalAlpha = 0.6;
     ctx.beginPath(); ctx.arc(s.x, s.y, this.radius * pulse, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
 }
 
-// ─── Evolution: Void Orb (MagicBolt lv3 + Fireball lv2) ──────────────────────
+// ─── Evolution: Dark Matter (Laser lv3 + Plasma Bomb lv2) ────────────────────
 
 export class VoidOrb implements Weapon {
-  readonly name = 'Void Orb'; readonly isEvolution = true; level = 1;
+  readonly name = 'Dark Matter'; readonly isEvolution = true; level = 1;
   private cooldown = 3.5; private damage = 80; private speed = 75;
   private timer = 0; private orbs: VoidOrbProjectile[] = []; private effects: ExplosionEffect[] = [];
 
@@ -505,10 +505,10 @@ export class VoidOrb implements Weapon {
   }
 }
 
-// ─── Evolution: Inferno (Aura lv2 + Fireball lv3) ─────────────────────────────
+// ─── Evolution: Nova Burst (Force Field lv2 + Plasma Bomb lv3) ────────────────
 
 export class Inferno implements Weapon {
-  readonly name = 'Inferno'; readonly isEvolution = true; level = 1;
+  readonly name = 'Nova Burst'; readonly isEvolution = true; level = 1;
   private auraCooldown = 0.9; private orbCooldown = 2.2;
   private damage = 40; private auraRange = 130;
   private auraTimer = 0; private orbTimer = 0;
@@ -532,7 +532,7 @@ export class Inferno implements Weapon {
         const dx = e.x - player.x, dy = e.y - player.y;
         if (Math.sqrt(dx * dx + dy * dy) < this.auraRange + e.radius) e.takeDamage(this.damage);
       }
-      this.effects.push(new ExplosionEffect(player.x, player.y, this.auraRange, 0.35, '#ff6f00'));
+      this.effects.push(new ExplosionEffect(player.x, player.y, this.auraRange, 0.35, '#00b0ff'));
     }
     if (this.orbTimer >= this.orbCooldown) {
       this.orbTimer = 0;
@@ -547,7 +547,7 @@ export class Inferno implements Weapon {
   draw(ctx: CanvasRenderingContext2D, camera: Camera, player: Player): void {
     this.cameraRef = camera;
     const s = camera.worldToScreen(player.x, player.y);
-    ctx.save(); ctx.strokeStyle = '#ff6f00'; ctx.globalAlpha = 0.2; ctx.lineWidth = 3;
+    ctx.save(); ctx.strokeStyle = '#0091ea'; ctx.globalAlpha = 0.2; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(s.x, s.y, this.auraRange, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
     for (const orb of this.orbs) orb.draw(ctx, camera);
     for (const fx of this.effects) fx.draw(ctx, camera);
@@ -560,14 +560,14 @@ export type AnyWeapon = Weapon;
 
 export function createWeaponByName(name: string): AnyWeapon | null {
   switch (name) {
-    case 'Magic Bolt':     return new MagicBolt();
-    case 'Whip':           return new Whip();
-    case 'Fireball':       return new Fireball();
-    case 'Lightning':      return new Lightning();
-    case 'Aura':           return new Aura();
-    case 'Thunder Strike': return new ThunderStrike();
-    case 'Void Orb':       return new VoidOrb();
-    case 'Inferno':        return new Inferno();
-    default:               return null;
+    case 'Laser':        return new MagicBolt();
+    case 'Plasma Whip':  return new Whip();
+    case 'Plasma Bomb':  return new Fireball();
+    case 'Ion Chain':    return new Lightning();
+    case 'Force Field':  return new Aura();
+    case 'Beam Lash':    return new ThunderStrike();
+    case 'Dark Matter':  return new VoidOrb();
+    case 'Nova Burst':   return new Inferno();
+    default:             return null;
   }
 }

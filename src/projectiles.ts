@@ -48,13 +48,22 @@ class Projectile {
   draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
     if (!this.alive) return;
     const s = camera.worldToScreen(this.x, this.y);
+    const angle = Math.atan2(this.vy, this.vx);
+    const len = Math.max(8, this.radius * 2.5);
+    const w = Math.max(2, this.radius * 0.6);
+
     ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.rotate(angle);
+    // Outer glow
     ctx.fillStyle = this.color;
     ctx.shadowColor = this.color;
-    ctx.shadowBlur = 8;
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, this.radius, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.shadowBlur = 6;
+    ctx.fillRect(-len / 2, -w / 2, len, w);
+    // Bright core
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-len / 2 + 1, -1, len - 2, 2);
     ctx.restore();
   }
 }

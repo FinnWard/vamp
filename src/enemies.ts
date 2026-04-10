@@ -76,33 +76,105 @@ export class Enemy {
     const s = camera.worldToScreen(this.x, this.y);
 
     ctx.save();
+    ctx.translate(s.x, s.y);
 
-    ctx.fillStyle = this.color;
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, this.radius, 0, Math.PI * 2);
-    ctx.fill();
+    if (this.type === 'grunt') {
+      this._drawGrunt(ctx);
+    } else if (this.type === 'fast') {
+      this._drawFast(ctx);
+    } else {
+      this._drawTank(ctx);
+    }
 
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(s.x - 5, s.y - 4, 4, 0, Math.PI * 2);
-    ctx.arc(s.x + 5, s.y - 4, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#111';
-    ctx.beginPath();
-    ctx.arc(s.x - 4, s.y - 4, 2, 0, Math.PI * 2);
-    ctx.arc(s.x + 6, s.y - 4, 2, 0, Math.PI * 2);
-    ctx.fill();
-
+    // HP bar
     const barW = this.radius * 2;
-    const barH = 4;
-    const bx = s.x - this.radius;
-    const by = s.y - this.radius - 8;
-    ctx.fillStyle = '#333';
+    const barH = 3;
+    const bx = -this.radius;
+    const by = -this.radius - 7;
+    ctx.fillStyle = '#1a1a2e';
     ctx.fillRect(bx, by, barW, barH);
-    ctx.fillStyle = '#e53935';
-    ctx.fillRect(bx, by, barW * (this.hp / this.maxHp), barH);
+    ctx.fillStyle = '#ff1744';
+    ctx.fillRect(bx, by, Math.round(barW * (this.hp / this.maxHp)), barH);
 
     ctx.restore();
+  }
+
+  private _drawGrunt(ctx: CanvasRenderingContext2D): void {
+    // Space invader style grunt
+    // Antennae
+    ctx.fillStyle = '#ef5350';
+    ctx.fillRect(-7, -14, 3, 5);
+    ctx.fillRect(4, -14, 3, 5);
+    // Head / body
+    ctx.fillStyle = '#e53935';
+    ctx.fillRect(-8, -9, 16, 12);
+    // Claws
+    ctx.fillStyle = '#ef5350';
+    ctx.fillRect(-12, -4, 5, 6);
+    ctx.fillRect(7, -4, 5, 6);
+    // Feet
+    ctx.fillStyle = '#b71c1c';
+    ctx.fillRect(-10, 3, 4, 4);
+    ctx.fillRect(-2, 3, 4, 4);
+    ctx.fillRect(6, 3, 4, 4);
+    // Eyes (white)
+    ctx.fillStyle = '#ffcdd2';
+    ctx.fillRect(-6, -7, 4, 4);
+    ctx.fillRect(2, -7, 4, 4);
+    // Pupils (dark)
+    ctx.fillStyle = '#4a0000';
+    ctx.fillRect(-5, -6, 2, 2);
+    ctx.fillRect(3, -6, 2, 2);
+  }
+
+  private _drawFast(ctx: CanvasRenderingContext2D): void {
+    // Dart-shaped fast enemy
+    ctx.fillStyle = '#ff7043';
+    // Nose
+    ctx.fillRect(-2, -11, 4, 4);
+    ctx.fillStyle = '#ff5722';
+    ctx.fillRect(-1, -14, 2, 4);
+    // Body
+    ctx.fillRect(-3, -7, 6, 14);
+    // Side fins
+    ctx.fillStyle = '#ff8a65';
+    ctx.fillRect(-7, -3, 4, 7);
+    ctx.fillRect(3, -3, 4, 7);
+    // Engine
+    ctx.fillStyle = '#bf360c';
+    ctx.fillRect(-3, 7, 6, 3);
+    // Eye slit
+    ctx.fillStyle = '#ffccbc';
+    ctx.fillRect(-2, -5, 4, 2);
+  }
+
+  private _drawTank(ctx: CanvasRenderingContext2D): void {
+    // Large blocky alien boss
+    ctx.fillStyle = '#6a1b9a';
+    // Side armor plates
+    ctx.fillRect(-14, -6, 5, 10);
+    ctx.fillRect(9, -6, 5, 10);
+    // Main body
+    ctx.fillStyle = '#7b1fa2';
+    ctx.fillRect(-9, -10, 18, 18);
+    // Turret top
+    ctx.fillStyle = '#8e24aa';
+    ctx.fillRect(-6, -14, 12, 5);
+    ctx.fillStyle = '#ab47bc';
+    ctx.fillRect(-2, -17, 4, 4);
+    // Center core
+    ctx.fillStyle = '#e040fb';
+    ctx.fillRect(-4, -4, 8, 8);
+    // Core glow pixel
+    ctx.fillStyle = '#f8bbd0';
+    ctx.fillRect(-2, -2, 4, 4);
+    // Eyes
+    ctx.fillStyle = '#ce93d8';
+    ctx.fillRect(-7, -6, 4, 3);
+    ctx.fillRect(3, -6, 4, 3);
+    ctx.fillStyle = '#4a148c';
+    ctx.fillRect(-6, -5, 2, 1);
+    ctx.fillRect(4, -5, 2, 1);
   }
 }
 

@@ -11,6 +11,15 @@ export class Player {
   readonly invincibleDuration: number = 0.5;
   alive: boolean = true;
 
+  /** Gem attraction radius (px) — increased by Tractor Beam upgrades. */
+  pickupRadius: number = 60;
+  /** Flat damage reduction per hit. */
+  armor: number = 0;
+  /** Accumulated speed multiplier applied to newly unlocked weapons. */
+  attackSpeedMult: number = 1.0;
+  /** Accumulated damage multiplier applied to newly unlocked weapons. */
+  damageMult: number = 1.0;
+
   facingAngle: number = -Math.PI / 2; // default: facing up
   private _isMoving: boolean = false;
   private _thrusterAge: number = 0;
@@ -28,7 +37,7 @@ export class Player {
 
   takeDamage(amount: number): void {
     if (this.invincibleTimer > 0 || !this.alive) return;
-    this.hp -= amount;
+    this.hp -= Math.max(1, amount - this.armor);
     this.invincibleTimer = this.invincibleDuration;
     if (this.hp <= 0) {
       this.hp = 0;

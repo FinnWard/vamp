@@ -40,7 +40,10 @@ const weapons: AnyWeapon[] = [new MagicBolt()];
 function addWeapon(name: string): void {
   if (!weapons.some(w => w.name === name)) {
     const w = createWeaponByName(name);
-    if (w) weapons.push(w);
+    if (w) {
+      w.scaleStats(player.attackSpeedMult, player.damageMult);
+      weapons.push(w);
+    }
   }
 }
 

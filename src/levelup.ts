@@ -18,7 +18,7 @@ export interface Upgrade {
   label: string;
   desc: string;
   apply(weapons: AnyWeapon[], addWeapon: AddWeaponFn, player: Player, removeWeapon: RemoveWeaponFn): void;
-  requires(weapons: AnyWeapon[]): boolean;
+  requires(weapons: AnyWeapon[], player: Player): boolean;
 }
 
 export type ApplyUpgradeFn = (choice: Upgrade) => void;
@@ -168,6 +168,38 @@ const UPGRADE_POOL: Upgrade[] = [
       weaponLevel(w, 'Force Field') >= 2 && weaponLevel(w, 'Plasma Bomb') >= 3 &&
       !w.some(x => x.name === 'Nova Burst'),
   },
+  // ── Generic powerups ───────────────────────────────────────────────────────
+  {
+    id: 'gen_atk_speed', label: '⚡ Systems Overclock', desc: 'All weapons fire 15% faster',
+    apply: (w, _add, player) => {
+      player.attackSpeedMult *= 0.85;
+      for (const weapon of w) weapon.scaleStats(0.85, 1.0);
+    },
+    requires: () => true,
+  },
+  {
+    id: 'gen_damage', label: '💥 Weapons Amplifier', desc: 'All weapons deal 20% more damage',
+    apply: (w, _add, player) => {
+      player.damageMult *= 1.20;
+      for (const weapon of w) weapon.scaleStats(1.0, 1.20);
+    },
+    requires: () => true,
+  },
+  {
+    id: 'gen_pickup', label: '🧲 Tractor Beam', desc: '+30 gem attraction radius',
+    apply: (_w, _add, player) => { player.pickupRadius += 30; },
+    requires: () => true,
+  },
+  {
+    id: 'gen_armor', label: '🛡 Titanium Plating', desc: '+4 flat damage reduction',
+    apply: (_w, _add, player) => { player.armor += 4; },
+    requires: () => true,
+  },
+  {
+    id: 'gen_repair', label: '🔧 Emergency Repair', desc: 'Restore 40 shield HP',
+    apply: (_w, _add, player) => { player.hp = Math.min(player.hp + 40, player.maxHp); },
+    requires: (_w, player) => player.hp < player.maxHp * 0.9,
+  },
 ];
 
 export class LevelUpManager {
@@ -192,7 +224,7 @@ export class LevelUpManager {
   }
 
   private triggerLevelUp(weapons: AnyWeapon[], addWeapon: AddWeaponFn, player: Player, removeWeapon: RemoveWeaponFn): void {
-    const available = UPGRADE_POOL.filter(u => u.requires(weapons));
+    const available = UPGRADE_POOL.filter(u => u.requires(weapons, player));
     const choices = shuffle([...available]).slice(0, 3);
     if (this.onLevelUp) {
       this.onLevelUp(choices, (choice) => {

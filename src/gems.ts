@@ -63,7 +63,8 @@ export class Gem {
       return;
     }
 
-    if (distSq < PULL_RADIUS_SQ) {
+    const pullRadiusSq = Math.max(PULL_RADIUS_SQ, player.pickupRadius * player.pickupRadius);
+    if (distSq < pullRadiusSq) {
       const dist = Math.sqrt(distSq);
       const speed = 200;
       this.x += (dx / dist) * speed * dt;

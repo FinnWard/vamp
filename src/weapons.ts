@@ -13,6 +13,8 @@ export interface Weapon {
   getStats(): string;
   update(dt: number, player: Player, enemies: Enemy[], pool: ProjectilePool): void;
   draw?(ctx: CanvasRenderingContext2D, camera: Camera, player: Player): void;
+  /** Scale cooldown by speedMult and damage by damageMult (for global powerups). */
+  scaleStats(speedMult: number, damageMult: number): void;
 }
 
 // ─── Visual: explosion ring effect ───────────────────────────────────────────
@@ -89,6 +91,11 @@ export class MagicBolt implements Weapon {
     else if (stat === 'pierce') { this.pierce++; this.level++; }
   }
 
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult;
+    this.damage = Math.round(this.damage * damageMult);
+  }
+
   update(dt: number, player: Player, enemies: Enemy[], pool: ProjectilePool): void {
     this.timer += dt;
     if (this.timer < this.cooldown) return;
@@ -138,6 +145,11 @@ export class Whip implements Weapon {
     if (stat === 'damage') { this.damage = Math.round(this.damage * 1.3); this.level++; }
     else if (stat === 'rate') { this.cooldown = Math.max(0.4, this.cooldown * 0.8); this.level++; }
     else if (stat === 'range') { this.range += 30; this.level++; }
+  }
+
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult;
+    this.damage = Math.round(this.damage * damageMult);
   }
 
   update(dt: number, player: Player, enemies: Enemy[], _pool: ProjectilePool): void {
@@ -247,6 +259,11 @@ export class Fireball implements Weapon {
     else if (stat === 'radius') { this.explosionRadius += 30; this.level++; }
   }
 
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult;
+    this.damage = Math.round(this.damage * damageMult);
+  }
+
   update(dt: number, player: Player, enemies: Enemy[], _pool: ProjectilePool): void {
     this.timer += dt;
     const camX = this.cameraRef ? this.cameraRef.x : 0;
@@ -292,6 +309,11 @@ export class Lightning implements Weapon {
     else if (stat === 'rate') { this.cooldown = Math.max(0.15, this.cooldown * 0.8); this.level++; }
   }
 
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult;
+    this.damage = Math.round(this.damage * damageMult);
+  }
+
   update(dt: number, player: Player, enemies: Enemy[], _pool: ProjectilePool): void {
     this.timer += dt;
     for (const f of this.flashes) f.update(dt);
@@ -333,6 +355,11 @@ export class Aura implements Weapon {
     else if (stat === 'rate') { this.cooldown = Math.max(0.4, this.cooldown * 0.75); this.level++; }
   }
 
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult;
+    this.damage = Math.round(this.damage * damageMult);
+  }
+
   update(dt: number, player: Player, enemies: Enemy[], _pool: ProjectilePool): void {
     this.timer += dt;
     for (const fx of this.pulseEffects) fx.update(dt);
@@ -368,6 +395,11 @@ export class ThunderStrike implements Weapon {
   private flashes: LightningFlash[] = [];
 
   getStats(): string { return `DMG:${this.damage} ARC+BOLT Rate:${(1 / this.cooldown).toFixed(1)}/s`; }
+
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult;
+    this.damage = Math.round(this.damage * damageMult);
+  }
 
   update(dt: number, player: Player, enemies: Enemy[], pool: ProjectilePool): void {
     this.timer += dt;
@@ -478,6 +510,11 @@ export class VoidOrb implements Weapon {
 
   getStats(): string { return `DMG:${this.damage} AoE:x3 Rate:${(1 / this.cooldown).toFixed(1)}/s`; }
 
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult;
+    this.damage = Math.round(this.damage * damageMult);
+  }
+
   update(dt: number, player: Player, enemies: Enemy[], _pool: ProjectilePool): void {
     this.timer += dt;
     for (const orb of this.orbs) orb.update(dt, enemies);
@@ -516,6 +553,12 @@ export class Inferno implements Weapon {
   private cameraRef: Camera | null = null;
 
   getStats(): string { return `DMG:${this.damage} Range:${this.auraRange} 6-way orbs`; }
+
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.auraCooldown *= speedMult;
+    this.orbCooldown *= speedMult;
+    this.damage = Math.round(this.damage * damageMult);
+  }
 
   update(dt: number, player: Player, enemies: Enemy[], _pool: ProjectilePool): void {
     this.auraTimer += dt; this.orbTimer += dt;

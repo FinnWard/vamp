@@ -14,9 +14,9 @@ interface EnemyStats {
 }
 
 const ENEMY_TYPES: Record<EnemyType, EnemyStats> = {
-  grunt: { radius: 16, speed: 70,  hp: 20, damage: 12, xpValue: 1, color: '#e53935' },
-  fast:  { radius: 12, speed: 130, hp: 10, damage: 8,  xpValue: 1, color: '#ff7043' },
-  tank:  { radius: 26, speed: 40,  hp: 80, damage: 20, xpValue: 3, color: '#7b1fa2' },
+  grunt: { radius: 16, speed: 90,  hp: 18, damage: 12, xpValue: 1, color: '#e53935' },
+  fast:  { radius: 12, speed: 165, hp: 10, damage: 8,  xpValue: 1, color: '#ff7043' },
+  tank:  { radius: 26, speed: 52,  hp: 70, damage: 20, xpValue: 3, color: '#7b1fa2' },
 };
 
 export class Enemy {
@@ -190,17 +190,17 @@ export class EnemySpawner {
   ) {}
 
   private spawnInterval(): number {
-    return Math.max(0.35, 1.5 - this.elapsed * 0.003);
+    return Math.max(0.2, 0.9 - this.elapsed * 0.007);
   }
 
   private spawnCount(): number {
-    return Math.floor(1 + this.elapsed / 30);
+    return Math.floor(1 + this.elapsed / 20);
   }
 
   private pickType(): EnemyType {
     const roll = Math.random();
-    if (this.elapsed > 90 && roll < 0.1) return 'tank';
-    if (this.elapsed > 30 && roll < 0.25) return 'fast';
+    if (this.elapsed > 50 && roll < 0.12) return 'tank';
+    if (this.elapsed > 12 && roll < 0.28) return 'fast';
     return 'grunt';
   }
 

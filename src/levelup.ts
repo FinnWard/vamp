@@ -2,11 +2,12 @@ import { shuffle } from './utils';
 import type { AnyWeapon } from './weapons';
 import type { Player } from './player';
 
-const XP_THRESHOLDS = [0, 5, 12, 22, 35, 52, 75, 105, 145, 200, 280] as const;
+// XP required per level — tuned for ~5 minute runs
+const XP_THRESHOLDS = [0, 2, 4, 8, 13, 19, 27, 36, 47, 60] as const;
 
 function xpForLevel(level: number): number {
   if (level < XP_THRESHOLDS.length) return XP_THRESHOLDS[level] ?? 0;
-  return (XP_THRESHOLDS[XP_THRESHOLDS.length - 1] ?? 0) + (level - XP_THRESHOLDS.length + 1) * 120;
+  return (XP_THRESHOLDS[XP_THRESHOLDS.length - 1] ?? 0) + (level - XP_THRESHOLDS.length + 1) * 75;
 }
 
 type AddWeaponFn = (name: string) => void;

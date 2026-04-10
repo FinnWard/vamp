@@ -1,40 +1,45 @@
-import { circlesOverlap, randomRange } from './utils.js';
+import { randomRange } from './utils';
+import type { Camera } from './camera';
+import type { Player } from './player';
 
 export class Gem {
-  constructor(x, y, value = 1) {
-    this.x = x;
-    this.y = y;
-    this.value = value;
+  alive: boolean = true;
+  readonly radius: number;
+  readonly color: string;
+
+  private age: number;
+  private readonly pullRadius = 60;
+  private readonly collectRadius = 30;
+
+  constructor(
+    public x: number,
+    public y: number,
+    readonly value: number = 1,
+  ) {
     this.radius = 7 + value * 2;
-    this.alive = true;
-    this.pullRadius = 60;
-    this.collectRadius = 30;
-    // Slight bobbing animation
-    this.age = randomRange(0, Math.PI * 2);
     this.color = value >= 3 ? '#ce93d8' : '#69f0ae';
+    this.age = randomRange(0, Math.PI * 2);
   }
 
-  update(dt, player) {
+  update(dt: number, player: Player): void {
     this.age += dt * 2;
 
     const dx = player.x - this.x;
     const dy = player.y - this.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // Magnetic pull toward player
     if (dist < this.pullRadius && dist > 0) {
       const speed = 200;
       this.x += (dx / dist) * speed * dt;
       this.y += (dy / dist) * speed * dt;
     }
 
-    // Collect
     if (dist < this.collectRadius) {
       this.alive = false;
     }
   }
 
-  draw(ctx, camera) {
+  draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
     if (!this.alive) return;
     const s = camera.worldToScreen(this.x, this.y);
     const bob = Math.sin(this.age) * 2;
@@ -44,7 +49,6 @@ export class Gem {
     ctx.shadowColor = this.color;
     ctx.shadowBlur = 10;
 
-    // Diamond shape
     ctx.beginPath();
     ctx.moveTo(s.x, s.y - this.radius + bob);
     ctx.lineTo(s.x + this.radius * 0.7, s.y + bob);
@@ -53,7 +57,6 @@ export class Gem {
     ctx.closePath();
     ctx.fill();
 
-    // Shine
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.beginPath();
     ctx.moveTo(s.x - 1, s.y - this.radius * 0.5 + bob);
@@ -67,16 +70,14 @@ export class Gem {
 }
 
 export class GemManager {
-  constructor() {
-    this.gems = [];
-    this.pendingXp = 0;
-  }
+  gems: Gem[] = [];
 
-  spawnFromEnemy(enemy) {
+  spawnFromEnemy(enemy: { x: number; y: number; xpValue: number }): void {
     this.gems.push(new Gem(enemy.x, enemy.y, enemy.xpValue));
   }
 
-  update(dt, player) {
+  /** Updates all gems and returns total XP collected this frame. */
+  update(dt: number, player: Player): number {
     let xpGained = 0;
     for (const g of this.gems) {
       if (!g.alive) continue;
@@ -87,7 +88,7 @@ export class GemManager {
     return xpGained;
   }
 
-  draw(ctx, camera) {
+  draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
     for (const g of this.gems) {
       g.draw(ctx, camera);
     }

@@ -1,24 +1,26 @@
-import { circlesOverlap } from './utils.js';
+import { circlesOverlap } from './utils';
+import type { Camera } from './camera';
+import type { Enemy } from './enemies';
 
-export class Projectile {
-  constructor(x, y, vx, vy, damage, radius, pierce, color) {
-    this.x = x;
-    this.y = y;
-    this.vx = vx;
-    this.vy = vy;
-    this.damage = damage;
-    this.radius = radius;
-    this.pierce = pierce; // how many enemies it can pass through
-    this.color = color;
-    this.alive = true;
-    this.hitEnemies = new Set(); // avoid hitting same enemy twice
-  }
+class Projectile {
+  alive: boolean = true;
+  private hitEnemies: Set<Enemy> = new Set();
 
-  update(dt, canvas, camera) {
+  constructor(
+    public x: number,
+    public y: number,
+    private vx: number,
+    private vy: number,
+    private damage: number,
+    private radius: number,
+    private pierce: number,
+    private color: string,
+  ) {}
+
+  update(dt: number, canvas: HTMLCanvasElement, camera: Camera): void {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
-    // Kill if far off screen (2x screen size from camera center)
     const limit = Math.max(canvas.width, canvas.height);
     const dx = this.x - camera.x;
     const dy = this.y - camera.y;
@@ -27,7 +29,7 @@ export class Projectile {
     }
   }
 
-  checkEnemies(enemies) {
+  checkEnemies(enemies: Enemy[]): void {
     if (!this.alive) return;
     for (const e of enemies) {
       if (!e.alive || this.hitEnemies.has(e)) continue;
@@ -43,7 +45,7 @@ export class Projectile {
     }
   }
 
-  draw(ctx, camera) {
+  draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
     if (!this.alive) return;
     const s = camera.worldToScreen(this.x, this.y);
     ctx.save();
@@ -58,15 +60,20 @@ export class Projectile {
 }
 
 export class ProjectilePool {
-  constructor() {
-    this.projectiles = [];
-  }
+  private projectiles: Projectile[] = [];
 
-  spawn(x, y, vx, vy, damage, radius = 6, pierce = 0, color = '#ffee58') {
+  spawn(
+    x: number, y: number,
+    vx: number, vy: number,
+    damage: number,
+    radius = 6,
+    pierce = 0,
+    color = '#ffee58',
+  ): void {
     this.projectiles.push(new Projectile(x, y, vx, vy, damage, radius, pierce, color));
   }
 
-  update(dt, canvas, camera, enemies) {
+  update(dt: number, canvas: HTMLCanvasElement, camera: Camera, enemies: Enemy[]): void {
     for (const p of this.projectiles) {
       p.update(dt, canvas, camera);
       p.checkEnemies(enemies);
@@ -74,7 +81,7 @@ export class ProjectilePool {
     this.projectiles = this.projectiles.filter(p => p.alive);
   }
 
-  draw(ctx, camera) {
+  draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
     for (const p of this.projectiles) {
       p.draw(ctx, camera);
     }

@@ -1,17 +1,19 @@
-import { Camera } from './camera.js';
-import { Player } from './player.js';
-import { EnemySpawner } from './enemies.js';
-import { ProjectilePool } from './projectiles.js';
-import { GemManager } from './gems.js';
-import { MagicBolt, createWeaponByName } from './weapons.js';
-import { LevelUpManager } from './levelup.js';
-import { HUD } from './hud.js';
+import { Camera } from './camera';
+import { Player } from './player';
+import { EnemySpawner } from './enemies';
+import { ProjectilePool } from './projectiles';
+import { GemManager } from './gems';
+import { MagicBolt, Whip, createWeaponByName, type AnyWeapon, type Weapon } from './weapons';
+import { LevelUpManager, type Upgrade, type ApplyUpgradeFn } from './levelup';
+import { HUD } from './hud';
+
+type GameState = 'playing' | 'levelup' | 'gameover';
 
 // ─── Canvas Setup ─────────────────────────────────────────────────────────────
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
+const ctx = canvas.getContext('2d')!;
 
-function resizeCanvas() {
+function resizeCanvas(): void {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 }
@@ -19,12 +21,10 @@ resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
 
 // ─── Game State ───────────────────────────────────────────────────────────────
-let state = 'playing'; // 'playing' | 'levelup' | 'gameover'
+let state: GameState = 'playing';
 let elapsed = 0;
 let kills = 0;
-let lastTime = null;
-let pendingLevelUpChoices = null;
-let pendingApplyFn = null;
+let lastTime: number | null = null;
 
 // ─── Core Objects ─────────────────────────────────────────────────────────────
 const camera   = new Camera(canvas);
@@ -35,27 +35,26 @@ const gems     = new GemManager();
 const hud      = new HUD();
 const levelMgr = new LevelUpManager();
 
-const weapons = [new MagicBolt()];
+const weapons: AnyWeapon[] = [new MagicBolt()];
 
-function addWeapon(name) {
+function addWeapon(name: string): void {
   if (!weapons.some(w => w.name === name)) {
-    weapons.push(createWeaponByName(name));
+    const w = createWeaponByName(name);
+    if (w) weapons.push(w);
   }
 }
 
 // ─── Level-up callback ────────────────────────────────────────────────────────
-levelMgr.onLevelUp = (choices, applyFn) => {
+levelMgr.onLevelUp = (choices: Upgrade[], applyFn: ApplyUpgradeFn) => {
   state = 'levelup';
-  pendingLevelUpChoices = choices;
-  pendingApplyFn = applyFn;
   showLevelUpUI(choices, applyFn);
 };
 
 // ─── Level-up UI ──────────────────────────────────────────────────────────────
-const levelUpOverlay = document.getElementById('levelUpOverlay');
-const upgradeCards   = document.getElementById('upgradeCards');
+const levelUpOverlay = document.getElementById('levelUpOverlay')!;
+const upgradeCards   = document.getElementById('upgradeCards')!;
 
-function showLevelUpUI(choices, applyFn) {
+function showLevelUpUI(choices: Upgrade[], applyFn: ApplyUpgradeFn): void {
   upgradeCards.innerHTML = '';
   for (const choice of choices) {
     const card = document.createElement('button');
@@ -70,19 +69,17 @@ function showLevelUpUI(choices, applyFn) {
   levelUpOverlay.classList.remove('hidden');
 }
 
-function hideLevelUpUI() {
+function hideLevelUpUI(): void {
   levelUpOverlay.classList.add('hidden');
   state = 'playing';
-  pendingLevelUpChoices = null;
-  pendingApplyFn = null;
 }
 
 // ─── Game Over UI ─────────────────────────────────────────────────────────────
-const gameOverOverlay = document.getElementById('gameOverOverlay');
-const gameOverStats   = document.getElementById('gameOverStats');
-const restartBtn      = document.getElementById('restartBtn');
+const gameOverOverlay = document.getElementById('gameOverOverlay')!;
+const gameOverStats   = document.getElementById('gameOverStats')!;
+const restartBtn      = document.getElementById('restartBtn')!;
 
-function showGameOver() {
+function showGameOver(): void {
   const mins = Math.floor(elapsed / 60);
   const secs = Math.floor(elapsed % 60).toString().padStart(2, '0');
   gameOverStats.textContent = `Survived: ${mins}:${secs}  |  Kills: ${kills}  |  Level: ${levelMgr.level}`;
@@ -94,7 +91,7 @@ restartBtn.addEventListener('click', () => {
 });
 
 // ─── Update ───────────────────────────────────────────────────────────────────
-function update(dt) {
+function update(dt: number): void {
   if (state !== 'playing') return;
 
   elapsed += dt;
@@ -103,26 +100,22 @@ function update(dt) {
   camera.follow(player.x, player.y);
   spawner.update(dt, player);
 
-  // Weapons fire
   for (const w of weapons) {
-    if (w.name === 'Magic Bolt') {
+    if (w instanceof MagicBolt) {
       w.update(dt, player, spawner.enemies, pool);
-    } else if (w.name === 'Whip') {
+    } else if (w instanceof Whip) {
       w.update(dt, player, spawner.enemies);
     }
   }
 
-  // Projectiles deal damage (no kill callback — collected below)
   pool.update(dt, canvas, camera, spawner.enemies);
 
-  // Collect all enemies killed this frame (projectiles + whip), spawn gems, tally kills
   const dead = spawner.collectDead();
   for (const e of dead) {
     kills++;
     gems.spawnFromEnemy(e);
   }
 
-  // Gems / XP
   const xpGained = gems.update(dt, player);
   if (xpGained > 0) {
     levelMgr.addXp(xpGained, weapons, addWeapon, player);
@@ -135,32 +128,30 @@ function update(dt) {
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
-function render() {
+function render(): void {
   ctx.fillStyle = '#0d1a0d';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   camera.drawGrid(ctx);
 
-  // All entities use camera.worldToScreen() internally — no canvas transform needed
   gems.draw(ctx, camera);
   spawner.draw(ctx, camera);
   pool.draw(ctx, camera);
   player.draw(ctx, camera);
 
-  // Whip arc uses worldToScreen for player position
   for (const w of weapons) {
-    if (w.name === 'Whip' && w.draw) {
+    if (w instanceof Whip) {
       w.draw(ctx, camera, player);
     }
   }
 
-  hud.draw(ctx, canvas, player, levelMgr, elapsed, kills, weapons);
+  hud.draw(ctx, canvas, player, levelMgr, elapsed, kills, weapons as Weapon[]);
 }
 
 // ─── Game Loop ────────────────────────────────────────────────────────────────
-function loop(timestamp) {
+function loop(timestamp: number): void {
   if (lastTime === null) lastTime = timestamp;
-  const dt = Math.min((timestamp - lastTime) / 1000, 0.1); // cap at 100ms
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
   lastTime = timestamp;
 
   update(dt);

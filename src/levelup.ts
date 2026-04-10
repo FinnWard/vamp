@@ -1,21 +1,35 @@
-import { shuffle } from './utils.js';
+import { shuffle } from './utils';
+import type { AnyWeapon } from './weapons';
+import type { Player } from './player';
 
-const XP_THRESHOLDS = [0, 5, 12, 22, 35, 52, 75, 105, 145, 200, 280];
+const XP_THRESHOLDS = [0, 5, 12, 22, 35, 52, 75, 105, 145, 200, 280] as const;
 
-function xpForLevel(level) {
-  if (level < XP_THRESHOLDS.length) return XP_THRESHOLDS[level];
-  return XP_THRESHOLDS[XP_THRESHOLDS.length - 1] + (level - XP_THRESHOLDS.length + 1) * 120;
+function xpForLevel(level: number): number {
+  if (level < XP_THRESHOLDS.length) return XP_THRESHOLDS[level] ?? 0;
+  return (XP_THRESHOLDS[XP_THRESHOLDS.length - 1] ?? 0) + (level - XP_THRESHOLDS.length + 1) * 120;
 }
 
-// All possible upgrades
-const UPGRADE_POOL = [
+type AddWeaponFn = (name: string) => void;
+
+export interface Upgrade {
+  id: string;
+  label: string;
+  desc: string;
+  apply(weapons: AnyWeapon[], addWeapon: AddWeaponFn, player: Player): void;
+  requires(weapons: AnyWeapon[]): boolean;
+}
+
+export type ApplyUpgradeFn = (choice: Upgrade) => void;
+export type LevelUpCallback = (choices: Upgrade[], apply: ApplyUpgradeFn) => void;
+
+const UPGRADE_POOL: Upgrade[] = [
   {
     id: 'bolt_damage',
     label: '⚡ Magic Bolt – Damage Up',
     desc: '+30% bolt damage',
     apply: (weapons) => {
       const w = weapons.find(w => w.name === 'Magic Bolt');
-      if (w) w.upgrade('damage');
+      if (w && 'upgrade' in w) (w as { upgrade(s: string): void }).upgrade('damage');
     },
     requires: (weapons) => weapons.some(w => w.name === 'Magic Bolt'),
   },
@@ -25,7 +39,7 @@ const UPGRADE_POOL = [
     desc: '+25% fire rate',
     apply: (weapons) => {
       const w = weapons.find(w => w.name === 'Magic Bolt');
-      if (w) w.upgrade('rate');
+      if (w && 'upgrade' in w) (w as { upgrade(s: string): void }).upgrade('rate');
     },
     requires: (weapons) => weapons.some(w => w.name === 'Magic Bolt'),
   },
@@ -35,7 +49,7 @@ const UPGRADE_POOL = [
     desc: 'Bolts pierce through +1 enemy',
     apply: (weapons) => {
       const w = weapons.find(w => w.name === 'Magic Bolt');
-      if (w) w.upgrade('pierce');
+      if (w && 'upgrade' in w) (w as { upgrade(s: string): void }).upgrade('pierce');
     },
     requires: (weapons) => weapons.some(w => w.name === 'Magic Bolt'),
   },
@@ -43,7 +57,7 @@ const UPGRADE_POOL = [
     id: 'add_whip',
     label: '🌀 Unlock Whip',
     desc: 'New weapon: sweeping arc melee attack',
-    apply: (weapons, addWeapon) => addWeapon('Whip'),
+    apply: (_weapons, addWeapon) => addWeapon('Whip'),
     requires: (weapons) => !weapons.some(w => w.name === 'Whip'),
   },
   {
@@ -52,7 +66,7 @@ const UPGRADE_POOL = [
     desc: '+30% whip damage',
     apply: (weapons) => {
       const w = weapons.find(w => w.name === 'Whip');
-      if (w) w.upgrade('damage');
+      if (w && 'upgrade' in w) (w as { upgrade(s: string): void }).upgrade('damage');
     },
     requires: (weapons) => weapons.some(w => w.name === 'Whip'),
   },
@@ -62,7 +76,7 @@ const UPGRADE_POOL = [
     desc: '+30px whip range',
     apply: (weapons) => {
       const w = weapons.find(w => w.name === 'Whip');
-      if (w) w.upgrade('range');
+      if (w && 'upgrade' in w) (w as { upgrade(s: string): void }).upgrade('range');
     },
     requires: (weapons) => weapons.some(w => w.name === 'Whip'),
   },
@@ -70,14 +84,14 @@ const UPGRADE_POOL = [
     id: 'player_speed',
     label: '👟 Speed Up',
     desc: '+20% movement speed',
-    apply: (weapons, addWeapon, player) => { player.speed *= 1.2; },
+    apply: (_weapons, _add, player) => { player.speed *= 1.2; },
     requires: () => true,
   },
   {
     id: 'player_hp',
     label: '❤️ Max HP Up',
     desc: '+25 max HP and heal 25',
-    apply: (weapons, addWeapon, player) => {
+    apply: (_weapons, _add, player) => {
       player.maxHp += 25;
       player.hp = Math.min(player.hp + 25, player.maxHp);
     },
@@ -86,34 +100,37 @@ const UPGRADE_POOL = [
 ];
 
 export class LevelUpManager {
+  level = 1;
+  xp = 0;
+  xpToNext: number;
+  onLevelUp: LevelUpCallback | null = null;
+
   constructor() {
-    this.level = 1;
-    this.xp = 0;
     this.xpToNext = xpForLevel(1);
-    this.pendingLevelUp = false;
-    this.onLevelUp = null; // callback(choices, applyFn)
   }
 
-  addXp(amount, weapons, addWeapon, player) {
+  addXp(amount: number, weapons: AnyWeapon[], addWeapon: AddWeaponFn, player: Player): void {
     if (amount <= 0) return;
     this.xp += amount;
     while (this.xp >= this.xpToNext) {
       this.xp -= this.xpToNext;
       this.level++;
       this.xpToNext = xpForLevel(this.level);
-      this._triggerLevelUp(weapons, addWeapon, player);
+      this.triggerLevelUp(weapons, addWeapon, player);
     }
   }
 
-  _triggerLevelUp(weapons, addWeapon, player) {
+  private triggerLevelUp(weapons: AnyWeapon[], addWeapon: AddWeaponFn, player: Player): void {
     const available = UPGRADE_POOL.filter(u => u.requires(weapons));
     const choices = shuffle([...available]).slice(0, 3);
-    if (this.onLevelUp) this.onLevelUp(choices, (choice) => {
-      choice.apply(weapons, addWeapon, player);
-    });
+    if (this.onLevelUp) {
+      this.onLevelUp(choices, (choice) => {
+        choice.apply(weapons, addWeapon, player);
+      });
+    }
   }
 
-  get xpFraction() {
+  get xpFraction(): number {
     return this.xpToNext > 0 ? Math.min(this.xp / this.xpToNext, 1) : 1;
   }
 }

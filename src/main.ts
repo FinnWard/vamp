@@ -3,7 +3,7 @@ import { Player } from './player';
 import { EnemySpawner } from './enemies';
 import { ProjectilePool } from './projectiles';
 import { GemManager } from './gems';
-import { MagicBolt, Whip, createWeaponByName, type AnyWeapon, type Weapon } from './weapons';
+import { MagicBolt, createWeaponByName, type AnyWeapon, type Weapon } from './weapons';
 import { LevelUpManager, type Upgrade, type ApplyUpgradeFn } from './levelup';
 import { HUD } from './hud';
 
@@ -42,6 +42,11 @@ function addWeapon(name: string): void {
     const w = createWeaponByName(name);
     if (w) weapons.push(w);
   }
+}
+
+function removeWeapon(name: string): void {
+  const idx = weapons.findIndex(w => w.name === name);
+  if (idx !== -1) weapons.splice(idx, 1);
 }
 
 // ─── Level-up callback ────────────────────────────────────────────────────────
@@ -100,12 +105,9 @@ function update(dt: number): void {
   camera.follow(player.x, player.y);
   spawner.update(dt, player);
 
+  // Uniform weapon update — all weapons share the same signature
   for (const w of weapons) {
-    if (w instanceof MagicBolt) {
-      w.update(dt, player, spawner.enemies, pool);
-    } else if (w instanceof Whip) {
-      w.update(dt, player, spawner.enemies);
-    }
+    w.update(dt, player, spawner.enemies, pool);
   }
 
   pool.update(dt, canvas, camera, spawner.enemies);
@@ -118,7 +120,7 @@ function update(dt: number): void {
 
   const xpGained = gems.update(dt, player);
   if (xpGained > 0) {
-    levelMgr.addXp(xpGained, weapons, addWeapon, player);
+    levelMgr.addXp(xpGained, weapons, addWeapon, player, removeWeapon);
   }
 
   if (!player.alive && state === 'playing') {
@@ -139,10 +141,9 @@ function render(): void {
   pool.draw(ctx, camera);
   player.draw(ctx, camera);
 
+  // Draw all weapons that have a draw method
   for (const w of weapons) {
-    if (w instanceof Whip) {
-      w.draw(ctx, camera, player);
-    }
+    w.draw?.(ctx, camera, player);
   }
 
   hud.draw(ctx, canvas, player, levelMgr, elapsed, kills, weapons as Weapon[]);

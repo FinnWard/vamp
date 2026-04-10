@@ -63,6 +63,7 @@ const levelUpOverlay = document.getElementById('levelUpOverlay')!;
 const upgradeCards   = document.getElementById('upgradeCards')!;
 
 function showLevelUpUI(choices: Upgrade[], applyFn: ApplyUpgradeFn): void {
+  menuBtn.classList.add('hidden');
   upgradeCards.innerHTML = '';
   for (const choice of choices) {
     const card = document.createElement('button');
@@ -79,6 +80,7 @@ function showLevelUpUI(choices: Upgrade[], applyFn: ApplyUpgradeFn): void {
 
 function hideLevelUpUI(): void {
   levelUpOverlay.classList.add('hidden');
+  menuBtn.classList.remove('hidden');
   state = 'playing';
 }
 
@@ -88,6 +90,7 @@ const gameOverStats   = document.getElementById('gameOverStats')!;
 const restartBtn      = document.getElementById('restartBtn')!;
 
 function showGameOver(): void {
+  menuBtn.classList.add('hidden');
   const mins = Math.floor(elapsed / 60);
   const secs = Math.floor(elapsed % 60).toString().padStart(2, '0');
   gameOverStats.textContent = `Survived: ${mins}:${secs}  |  Kills: ${kills}  |  Level: ${levelMgr.level}`;
@@ -103,10 +106,12 @@ const pauseOverlay  = document.getElementById('pauseOverlay')!;
 const pauseStats    = document.getElementById('pauseStats')!;
 const pauseWeapons  = document.getElementById('pauseWeapons')!;
 const resumeBtn     = document.getElementById('resumeBtn')!;
+const menuBtn       = document.getElementById('menuBtn')!;
 
 function showPause(): void {
   state = 'paused';
   lastTime = null; // reset dt so resuming doesn't jump
+  menuBtn.textContent = '▶';
 
   const mins = Math.floor(elapsed / 60);
   const secs = Math.floor(elapsed % 60).toString().padStart(2, '0');
@@ -136,8 +141,14 @@ function showPause(): void {
 
 function hidePause(): void {
   pauseOverlay.classList.add('hidden');
+  menuBtn.textContent = '⏸';
   state = 'playing';
 }
+
+menuBtn.addEventListener('click', () => {
+  if (state === 'playing') showPause();
+  else if (state === 'paused') hidePause();
+});
 
 resumeBtn.addEventListener('click', hidePause);
 

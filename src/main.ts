@@ -7,7 +7,7 @@ import { MagicBolt, createWeaponByName, type AnyWeapon, type Weapon } from './we
 import { LevelUpManager, type Upgrade, type ApplyUpgradeFn } from './levelup';
 import { HUD } from './hud';
 
-type GameState = 'playing' | 'levelup' | 'gameover';
+type GameState = 'playing' | 'levelup' | 'gameover' | 'paused';
 
 // ─── Canvas Setup ─────────────────────────────────────────────────────────────
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
@@ -95,6 +95,56 @@ restartBtn.addEventListener('click', () => {
   window.location.reload();
 });
 
+// ─── Pause UI ─────────────────────────────────────────────────────────────────
+const pauseOverlay  = document.getElementById('pauseOverlay')!;
+const pauseStats    = document.getElementById('pauseStats')!;
+const pauseWeapons  = document.getElementById('pauseWeapons')!;
+const resumeBtn     = document.getElementById('resumeBtn')!;
+
+function showPause(): void {
+  state = 'paused';
+  lastTime = null; // reset dt so resuming doesn't jump
+
+  const mins = Math.floor(elapsed / 60);
+  const secs = Math.floor(elapsed % 60).toString().padStart(2, '0');
+  const hpPct = Math.round((player.hp / player.maxHp) * 100);
+
+  pauseStats.innerHTML = `
+    <span><span class="stat-val">${mins}:${secs}</span>TIME</span>
+    <span><span class="stat-val">${kills}</span>KILLS</span>
+    <span><span class="stat-val">LV ${levelMgr.level}</span>RANK</span>
+    <span><span class="stat-val">${hpPct}%</span>SHIELD</span>
+  `;
+
+  pauseWeapons.innerHTML = '';
+  for (const w of weapons) {
+    const card = document.createElement('div');
+    card.className = `pause-weapon-card${w.isEvolution ? ' evolution' : ''}`;
+    card.innerHTML = `
+      <div class="pause-weapon-name">${w.isEvolution ? '★ ' : ''}${w.name}</div>
+      <div class="pause-weapon-level">Level ${w.level}${w.isEvolution ? '  [EVOLVED]' : ''}</div>
+      <div class="pause-weapon-stats">${w.getStats()}</div>
+    `;
+    pauseWeapons.appendChild(card);
+  }
+
+  pauseOverlay.classList.remove('hidden');
+}
+
+function hidePause(): void {
+  pauseOverlay.classList.add('hidden');
+  state = 'playing';
+}
+
+resumeBtn.addEventListener('click', hidePause);
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Escape' || e.code === 'KeyP') {
+    if (state === 'playing') showPause();
+    else if (state === 'paused') hidePause();
+  }
+});
+
 // ─── Update ───────────────────────────────────────────────────────────────────
 function update(dt: number): void {
   if (state !== 'playing') return;
@@ -153,8 +203,8 @@ function render(): void {
 // ─── Game Loop ────────────────────────────────────────────────────────────────
 function loop(timestamp: number): void {
   if (lastTime === null) lastTime = timestamp;
-  const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
-  lastTime = timestamp;
+  const dt = state === 'paused' ? 0 : Math.min((timestamp - lastTime) / 1000, 0.1);
+  lastTime = state === 'paused' ? null : timestamp;
 
   update(dt);
   render();

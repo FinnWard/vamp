@@ -28,7 +28,7 @@ let lastTime: number | null = null;
 
 // ─── Core Objects ─────────────────────────────────────────────────────────────
 const camera   = new Camera(canvas);
-const player   = new Player();
+const player   = new Player(canvas, camera);
 const spawner  = new EnemySpawner(canvas, camera);
 const pool     = new ProjectilePool();
 const gems     = new GemManager();

@@ -26,13 +26,50 @@ export class Player {
 
   private keys: Record<string, boolean> = {};
 
-  constructor() {
+  /** World-space target set by mouse/touch hold. Null = not active. */
+  private _pointerTarget: { x: number; y: number } | null = null;
+
+  constructor(private canvas: HTMLCanvasElement, private camera: Camera) {
     this._bindInput();
   }
 
   private _bindInput(): void {
     window.addEventListener('keydown', (e) => { this.keys[e.code] = true; });
     window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
+
+    // Mouse: move while button held
+    this.canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 0) this._setPointerFromEvent(e.clientX, e.clientY);
+    });
+    this.canvas.addEventListener('mousemove', (e) => {
+      if (e.buttons & 1) this._setPointerFromEvent(e.clientX, e.clientY);
+    });
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this._pointerTarget = null;
+    });
+
+    // Touch: move toward finger
+    this.canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const t = e.touches[0];
+      if (t) this._setPointerFromEvent(t.clientX, t.clientY);
+    }, { passive: false });
+    this.canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      const t = e.touches[0];
+      if (t) this._setPointerFromEvent(t.clientX, t.clientY);
+    }, { passive: false });
+    this.canvas.addEventListener('touchend', () => { this._pointerTarget = null; });
+    this.canvas.addEventListener('touchcancel', () => { this._pointerTarget = null; });
+  }
+
+  private _setPointerFromEvent(clientX: number, clientY: number): void {
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = this.canvas.width / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+    const screenX = (clientX - rect.left) * scaleX;
+    const screenY = (clientY - rect.top) * scaleY;
+    this._pointerTarget = this.camera.screenToWorld(screenX, screenY);
   }
 
   takeDamage(amount: number): void {
@@ -52,10 +89,24 @@ export class Player {
 
     let dx = 0;
     let dy = 0;
-    if (this.keys['ArrowUp']   || this.keys['KeyW']) dy -= 1;
-    if (this.keys['ArrowDown'] || this.keys['KeyS']) dy += 1;
-    if (this.keys['ArrowLeft'] || this.keys['KeyA']) dx -= 1;
-    if (this.keys['ArrowRight']|| this.keys['KeyD']) dx += 1;
+
+    // Keyboard input
+    if (this.keys['ArrowUp']    || this.keys['KeyW']) dy -= 1;
+    if (this.keys['ArrowDown']  || this.keys['KeyS']) dy += 1;
+    if (this.keys['ArrowLeft']  || this.keys['KeyA']) dx -= 1;
+    if (this.keys['ArrowRight'] || this.keys['KeyD']) dx += 1;
+
+    // Pointer (mouse/touch): only apply when no keyboard key is held
+    if (dx === 0 && dy === 0 && this._pointerTarget) {
+      const pdx = this._pointerTarget.x - this.x;
+      const pdy = this._pointerTarget.y - this.y;
+      const distSq = pdx * pdx + pdy * pdy;
+      if (distSq > 16 * 16) {
+        const dist = Math.sqrt(distSq);
+        dx = pdx / dist;
+        dy = pdy / dist;
+      }
+    }
 
     const len = Math.sqrt(dx * dx + dy * dy);
     this._isMoving = len > 0;

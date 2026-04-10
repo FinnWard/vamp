@@ -26,6 +26,8 @@ export class Enemy {
   alive: boolean = true;
   readonly radius: number;
   readonly speed: number;
+  /** Multiplier applied to speed each frame — reset toward 1 over time. Used by cryo weapons. */
+  slowMultiplier: number = 1.0;
   readonly maxHp: number;
   hp: number;
   readonly damage: number;
@@ -58,12 +60,17 @@ export class Enemy {
   update(dt: number, player: Player): void {
     if (!this.alive) return;
 
+    // Recover from slow over time
+    if (this.slowMultiplier < 1.0) {
+      this.slowMultiplier = Math.min(1.0, this.slowMultiplier + dt * 1.5);
+    }
+
     const dx = player.x - this.x;
     const dy = player.y - this.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist > 0) {
-      this.x += (dx / dist) * this.speed * dt;
-      this.y += (dy / dist) * this.speed * dt;
+      this.x += (dx / dist) * this.speed * this.slowMultiplier * dt;
+      this.y += (dy / dist) * this.speed * this.slowMultiplier * dt;
     }
 
     if (circlesOverlap(this.x, this.y, this.radius, player.x, player.y, player.radius)) {

@@ -168,6 +168,97 @@ const UPGRADE_POOL: Upgrade[] = [
       weaponLevel(w, 'Force Field') >= 2 && weaponLevel(w, 'Plasma Bomb') >= 3 &&
       !w.some(x => x.name === 'Nova Burst'),
   },
+  // ── Missile Barrage ────────────────────────────────────────────────────────
+  {
+    id: 'add_missile', label: '🚀 Unlock Missile Barrage', desc: 'New weapon: homing explosive missiles',
+    apply: (_w, add) => add('Missile Barrage'),
+    requires: (w) => !w.some(x => x.name === 'Missile Barrage') && !w.some(x => x.name === 'Quantum Torpedo'),
+  },
+  {
+    id: 'missile_damage', label: '🚀 Missile Barrage – Damage Up', desc: '+30% missile damage',
+    apply: (w) => upgradeWeapon(w, 'Missile Barrage', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Missile Barrage' && !x.isEvolution),
+  },
+  {
+    id: 'missile_rate', label: '🚀 Missile Barrage – Fire Rate Up', desc: '+22% fire rate',
+    apply: (w) => upgradeWeapon(w, 'Missile Barrage', 'rate'),
+    requires: (w) => w.some(x => x.name === 'Missile Barrage' && !x.isEvolution),
+  },
+  {
+    id: 'missile_count', label: '🚀 Missile Barrage – Salvo Up', desc: '+1 missile per volley',
+    apply: (w) => upgradeWeapon(w, 'Missile Barrage', 'count'),
+    requires: (w) => w.some(x => x.name === 'Missile Barrage' && !x.isEvolution),
+  },
+  // ── Pulse Cannon ───────────────────────────────────────────────────────────
+  {
+    id: 'add_pulse', label: '💛 Unlock Pulse Cannon', desc: 'New weapon: multi-directional burst',
+    apply: (_w, add) => add('Pulse Cannon'),
+    requires: (w) => !w.some(x => x.name === 'Pulse Cannon') && !w.some(x => x.name === 'Solar Flare'),
+  },
+  {
+    id: 'pulse_damage', label: '💛 Pulse Cannon – Damage Up', desc: '+30% pulse damage',
+    apply: (w) => upgradeWeapon(w, 'Pulse Cannon', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Pulse Cannon' && !x.isEvolution),
+  },
+  {
+    id: 'pulse_rate', label: '💛 Pulse Cannon – Fire Rate Up', desc: '+20% fire rate',
+    apply: (w) => upgradeWeapon(w, 'Pulse Cannon', 'rate'),
+    requires: (w) => w.some(x => x.name === 'Pulse Cannon' && !x.isEvolution),
+  },
+  {
+    id: 'pulse_dirs', label: '💛 Pulse Cannon – More Directions', desc: '+2 fire directions',
+    apply: (w) => upgradeWeapon(w, 'Pulse Cannon', 'directions'),
+    requires: (w) => w.some(x => x.name === 'Pulse Cannon' && !x.isEvolution),
+  },
+  // ── Cryo Beam ──────────────────────────────────────────────────────────────
+  {
+    id: 'add_cryo', label: '🧊 Unlock Cryo Beam', desc: 'New weapon: freeze ray that slows enemies',
+    apply: (_w, add) => add('Cryo Beam'),
+    requires: (w) => !w.some(x => x.name === 'Cryo Beam') && !w.some(x => x.name === 'Glacial Storm'),
+  },
+  {
+    id: 'cryo_damage', label: '🧊 Cryo Beam – Damage Up', desc: '+30% cryo damage',
+    apply: (w) => upgradeWeapon(w, 'Cryo Beam', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Cryo Beam' && !x.isEvolution),
+  },
+  {
+    id: 'cryo_range', label: '🧊 Cryo Beam – Range Up', desc: '+40px beam range',
+    apply: (w) => upgradeWeapon(w, 'Cryo Beam', 'range'),
+    requires: (w) => w.some(x => x.name === 'Cryo Beam' && !x.isEvolution),
+  },
+  {
+    id: 'cryo_rate', label: '🧊 Cryo Beam – Tick Rate Up', desc: '+20% tick rate',
+    apply: (w) => upgradeWeapon(w, 'Cryo Beam', 'rate'),
+    requires: (w) => w.some(x => x.name === 'Cryo Beam' && !x.isEvolution),
+  },
+  // ── New evolutions ─────────────────────────────────────────────────────────
+  {
+    id: 'evo_solar_flare',
+    label: '🔵💛 EVOLVE: Solar Flare',
+    desc: 'Merge Laser lv2 + Pulse Cannon lv2 → 8-way piercing solar bolts',
+    apply: (_w, add, _p, remove) => { remove('Laser'); remove('Pulse Cannon'); add('Solar Flare'); },
+    requires: (w) =>
+      weaponLevel(w, 'Laser') >= 2 && weaponLevel(w, 'Pulse Cannon') >= 2 &&
+      !w.some(x => x.name === 'Solar Flare'),
+  },
+  {
+    id: 'evo_quantum_torpedo',
+    label: '🚀💠 EVOLVE: Quantum Torpedo',
+    desc: 'Merge Missile Barrage lv2 + Plasma Bomb lv2 → giant homing bomb',
+    apply: (_w, add, _p, remove) => { remove('Missile Barrage'); remove('Plasma Bomb'); add('Quantum Torpedo'); },
+    requires: (w) =>
+      weaponLevel(w, 'Missile Barrage') >= 2 && weaponLevel(w, 'Plasma Bomb') >= 2 &&
+      !w.some(x => x.name === 'Quantum Torpedo'),
+  },
+  {
+    id: 'evo_glacial_storm',
+    label: '🧊🛡 EVOLVE: Glacial Storm',
+    desc: 'Merge Cryo Beam lv2 + Force Field lv2 → freeze field + cryo pulses',
+    apply: (_w, add, _p, remove) => { remove('Cryo Beam'); remove('Force Field'); add('Glacial Storm'); },
+    requires: (w) =>
+      weaponLevel(w, 'Cryo Beam') >= 2 && weaponLevel(w, 'Force Field') >= 2 &&
+      !w.some(x => x.name === 'Glacial Storm'),
+  },
   // ── Generic powerups ───────────────────────────────────────────────────────
   {
     id: 'gen_atk_speed', label: '⚡ Systems Overclock', desc: 'All weapons fire 15% faster',

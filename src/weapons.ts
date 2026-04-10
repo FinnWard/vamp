@@ -597,20 +597,356 @@ export class Inferno implements Weapon {
   }
 }
 
+// ─── Weapon: Missile Barrage ──────────────────────────────────────────────────
+
+class HomingMissile {
+  alive = true;
+  private age = 0;
+  private readonly maxAge = 3.5;
+  private hitEnemies = new Set<Enemy>();
+
+  constructor(
+    public x: number, public y: number,
+    private vx: number, private vy: number,
+    private damage: number,
+    readonly radius: number,
+    private explosionRadius: number,
+    private effects: ExplosionEffect[],
+  ) {}
+
+  update(dt: number, enemies: Enemy[], camX: number, camY: number): void {
+    this.age += dt;
+    if (this.age >= this.maxAge || Math.abs(this.x - camX) > 1600 || Math.abs(this.y - camY) > 1600) {
+      this.alive = false; return;
+    }
+    // Home toward nearest alive enemy
+    let nearest: Enemy | null = null; let bestDist = Infinity;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const d = (e.x - this.x) ** 2 + (e.y - this.y) ** 2;
+      if (d < bestDist) { bestDist = d; nearest = e; }
+    }
+    if (nearest) {
+      const dx = nearest.x - this.x, dy = nearest.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const tx = (dx / dist) * 280, ty = (dy / dist) * 280;
+      const turnRate = 4.5;
+      this.vx += (tx - this.vx) * turnRate * dt;
+      this.vy += (ty - this.vy) * turnRate * dt;
+      const spd = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+      if (spd > 280) { this.vx = (this.vx / spd) * 280; this.vy = (this.vy / spd) * 280; }
+    }
+    this.x += this.vx * dt; this.y += this.vy * dt;
+    for (const e of enemies) {
+      if (!e.alive || this.hitEnemies.has(e)) continue;
+      if (circlesOverlap(this.x, this.y, this.radius, e.x, e.y, e.radius)) { this.explode(enemies); return; }
+    }
+  }
+
+  explode(enemies: Enemy[]): void {
+    this.alive = false;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const dx = e.x - this.x, dy = e.y - this.y;
+      if (Math.sqrt(dx * dx + dy * dy) < this.explosionRadius + e.radius) e.takeDamage(this.damage);
+    }
+    this.effects.push(new ExplosionEffect(this.x, this.y, this.explosionRadius, 0.45, '#ff6d00'));
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    if (!this.alive) return;
+    const s = camera.worldToScreen(this.x, this.y);
+    const angle = Math.atan2(this.vy, this.vx);
+    ctx.save();
+    ctx.translate(s.x, s.y); ctx.rotate(angle);
+    ctx.fillStyle = '#ff6d00'; ctx.shadowColor = '#ffab40'; ctx.shadowBlur = 10;
+    ctx.fillRect(-10, -3, 16, 6);
+    ctx.fillStyle = '#ffab40';
+    ctx.fillRect(-14, -2, 6, 4);
+    ctx.fillStyle = 'rgba(255,109,0,0.4)';
+    ctx.fillRect(-22, -3, 10, 6);
+    ctx.restore();
+  }
+}
+
+export class MissileBarrage implements Weapon {
+  readonly name = 'Missile Barrage'; readonly isEvolution = false; level = 1;
+  cooldown = 1.8; damage = 35; count = 1; explosionRadius = 70;
+  private timer = 0; private missiles: HomingMissile[] = []; private effects: ExplosionEffect[] = [];
+  private cameraRef: Camera | null = null;
+
+  getStats(): string { return `DMG:${this.damage} Blast:${this.explosionRadius}px x${this.count}`; }
+
+  upgrade(stat: 'damage' | 'rate' | 'count'): void {
+    if (stat === 'damage') { this.damage = Math.round(this.damage * 1.3); this.level++; }
+    else if (stat === 'rate') { this.cooldown = Math.max(0.6, this.cooldown * 0.78); this.level++; }
+    else if (stat === 'count') { this.count++; this.level++; }
+  }
+
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult; this.damage = Math.round(this.damage * damageMult);
+  }
+
+  update(dt: number, player: Player, enemies: Enemy[], _pool: ProjectilePool): void {
+    this.timer += dt;
+    const camX = this.cameraRef?.x ?? 0, camY = this.cameraRef?.y ?? 0;
+    for (const m of this.missiles) m.update(dt, enemies, camX, camY);
+    for (const fx of this.effects) fx.update(dt);
+    this.missiles = this.missiles.filter(m => m.alive);
+    this.effects = this.effects.filter(fx => !fx.done);
+    if (this.timer < this.cooldown) return;
+    this.timer = 0;
+    const alive = enemies.filter(e => e.alive);
+    if (!alive.length) return;
+    for (let i = 0; i < this.count; i++) {
+      const spread = (i - (this.count - 1) / 2) * 0.35;
+      const base = Math.atan2(alive[0]!.y - player.y, alive[0]!.x - player.x) + spread;
+      this.missiles.push(new HomingMissile(
+        player.x + Math.cos(base) * 20, player.y + Math.sin(base) * 20,
+        Math.cos(base) * 200, Math.sin(base) * 200,
+        this.damage, 8, this.explosionRadius, this.effects,
+      ));
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, _player: Player): void {
+    this.cameraRef = camera;
+    for (const m of this.missiles) m.draw(ctx, camera);
+    for (const fx of this.effects) fx.draw(ctx, camera);
+  }
+}
+
+// ─── Weapon: Pulse Cannon ─────────────────────────────────────────────────────
+
+export class PulseCannon implements Weapon {
+  readonly name = 'Pulse Cannon'; readonly isEvolution = false; level = 1;
+  cooldown = 1.6; damage = 18; directions = 4;
+  private timer = 0;
+  private readonly color = '#ffd740';
+
+  getStats(): string { return `DMG:${this.damage} ${this.directions}-way Rate:${(1 / this.cooldown).toFixed(1)}/s`; }
+
+  upgrade(stat: 'damage' | 'rate' | 'directions'): void {
+    if (stat === 'damage') { this.damage = Math.round(this.damage * 1.3); this.level++; }
+    else if (stat === 'rate') { this.cooldown = Math.max(0.5, this.cooldown * 0.8); this.level++; }
+    else if (stat === 'directions') { this.directions = Math.min(8, this.directions + 2); this.level++; }
+  }
+
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult; this.damage = Math.round(this.damage * damageMult);
+  }
+
+  update(dt: number, player: Player, _enemies: Enemy[], pool: ProjectilePool): void {
+    this.timer += dt;
+    if (this.timer < this.cooldown) return;
+    this.timer = 0;
+    for (let i = 0; i < this.directions; i++) {
+      const angle = (i / this.directions) * Math.PI * 2;
+      pool.spawn(player.x, player.y, Math.cos(angle) * 340, Math.sin(angle) * 340,
+        this.damage, 7, 0, this.color);
+    }
+  }
+}
+
+// ─── Weapon: Cryo Beam ────────────────────────────────────────────────────────
+
+export class CryoBeam implements Weapon {
+  readonly name = 'Cryo Beam'; readonly isEvolution = false; level = 1;
+  cooldown = 0.25; damage = 8; range = 220; slowFactor = 0.5;
+  private timer = 0;
+  private beamTarget: { x: number; y: number } | null = null;
+  private beamAge = 0;
+
+  getStats(): string { return `DPS:${Math.round(this.damage / this.cooldown)} Range:${this.range} Slows`; }
+
+  upgrade(stat: 'damage' | 'range' | 'rate'): void {
+    if (stat === 'damage') { this.damage = Math.round(this.damage * 1.3); this.level++; }
+    else if (stat === 'range') { this.range += 40; this.level++; }
+    else if (stat === 'rate') { this.cooldown = Math.max(0.08, this.cooldown * 0.8); this.level++; }
+  }
+
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult; this.damage = Math.round(this.damage * damageMult);
+  }
+
+  update(dt: number, player: Player, enemies: Enemy[], _pool: ProjectilePool): void {
+    this.timer += dt;
+    this.beamAge += dt;
+    let nearest: Enemy | null = null; let bestDist = Infinity;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const d = (e.x - player.x) ** 2 + (e.y - player.y) ** 2;
+      if (d < bestDist) { bestDist = d; nearest = e; }
+    }
+    if (nearest && Math.sqrt(bestDist) < this.range) {
+      this.beamTarget = { x: nearest.x, y: nearest.y };
+      if (this.timer >= this.cooldown) {
+        this.timer = 0;
+        nearest.takeDamage(this.damage);
+        nearest.slowMultiplier = Math.min(nearest.slowMultiplier, this.slowFactor);
+      }
+    } else {
+      this.beamTarget = null;
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, player: Player): void {
+    if (!this.beamTarget) return;
+    const a = camera.worldToScreen(player.x, player.y);
+    const b = camera.worldToScreen(this.beamTarget.x, this.beamTarget.y);
+    const flicker = 0.7 + Math.sin(this.beamAge * 30) * 0.3;
+    ctx.save();
+    ctx.strokeStyle = '#80d8ff'; ctx.shadowColor = '#80d8ff'; ctx.shadowBlur = 18;
+    ctx.lineWidth = 3 * flicker; ctx.globalAlpha = 0.85 * flicker;
+    ctx.setLineDash([8, 4]);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#e1f5fe'; ctx.globalAlpha = flicker;
+    ctx.beginPath(); ctx.arc(b.x, b.y, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ─── Evolution: Solar Flare (Laser lv2 + Pulse Cannon lv2) ───────────────────
+
+export class SolarFlare implements Weapon {
+  readonly name = 'Solar Flare'; readonly isEvolution = true; level = 1;
+  private cooldown = 0.9; private damage = 40; private speed = 420; private directions = 8;
+  private timer = 0;
+  private readonly color = '#ffea00';
+
+  getStats(): string { return `DMG:${this.damage} ${this.directions}-way pierce Rate:${(1 / this.cooldown).toFixed(1)}/s`; }
+
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult; this.damage = Math.round(this.damage * damageMult);
+  }
+
+  update(dt: number, player: Player, _enemies: Enemy[], pool: ProjectilePool): void {
+    this.timer += dt;
+    if (this.timer < this.cooldown) return;
+    this.timer = 0;
+    for (let i = 0; i < this.directions; i++) {
+      const angle = (i / this.directions) * Math.PI * 2;
+      pool.spawn(player.x, player.y, Math.cos(angle) * this.speed, Math.sin(angle) * this.speed,
+        this.damage, 9, 4, this.color);
+    }
+  }
+}
+
+// ─── Evolution: Quantum Torpedo (Missile Barrage lv2 + Plasma Bomb lv2) ──────
+
+export class QuantumTorpedo implements Weapon {
+  readonly name = 'Quantum Torpedo'; readonly isEvolution = true; level = 1;
+  private cooldown = 2.5; private damage = 100; private explosionRadius = 160;
+  private timer = 0; private missiles: HomingMissile[] = []; private effects: ExplosionEffect[] = [];
+  private cameraRef: Camera | null = null;
+
+  getStats(): string { return `DMG:${this.damage} Blast:${this.explosionRadius}px homing`; }
+
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult; this.damage = Math.round(this.damage * damageMult);
+  }
+
+  update(dt: number, player: Player, enemies: Enemy[], _pool: ProjectilePool): void {
+    this.timer += dt;
+    const camX = this.cameraRef?.x ?? 0, camY = this.cameraRef?.y ?? 0;
+    for (const m of this.missiles) m.update(dt, enemies, camX, camY);
+    for (const fx of this.effects) fx.update(dt);
+    this.missiles = this.missiles.filter(m => m.alive);
+    this.effects = this.effects.filter(fx => !fx.done);
+    if (this.timer < this.cooldown) return;
+    this.timer = 0;
+    const alive = enemies.filter(e => e.alive);
+    if (!alive.length) return;
+    const target = alive[0]!;
+    const angle = Math.atan2(target.y - player.y, target.x - player.x);
+    this.missiles.push(new HomingMissile(
+      player.x, player.y, Math.cos(angle) * 160, Math.sin(angle) * 160,
+      this.damage, 18, this.explosionRadius, this.effects,
+    ));
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, _player: Player): void {
+    this.cameraRef = camera;
+    for (const m of this.missiles) m.draw(ctx, camera);
+    for (const fx of this.effects) fx.draw(ctx, camera);
+  }
+}
+
+// ─── Evolution: Glacial Storm (Cryo Beam lv2 + Force Field lv2) ──────────────
+
+export class GlacialStorm implements Weapon {
+  readonly name = 'Glacial Storm'; readonly isEvolution = true; level = 1;
+  private pulseCooldown = 1.0; private tickCooldown = 0.2;
+  private damage = 50; private range = 200; private slowFactor = 0.35;
+  private pulseTimer = 0; private tickTimer = 0;
+  private pulseEffects: ExplosionEffect[] = [];
+
+  getStats(): string { return `DMG:${this.damage} Range:${this.range} Freeze pulse`; }
+
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.pulseCooldown *= speedMult; this.tickCooldown *= speedMult;
+    this.damage = Math.round(this.damage * damageMult);
+  }
+
+  update(dt: number, player: Player, enemies: Enemy[], _pool: ProjectilePool): void {
+    this.pulseTimer += dt; this.tickTimer += dt;
+    for (const fx of this.pulseEffects) fx.update(dt);
+    this.pulseEffects = this.pulseEffects.filter(fx => !fx.done);
+
+    // Continuous slow tick
+    if (this.tickTimer >= this.tickCooldown) {
+      this.tickTimer = 0;
+      for (const e of enemies) {
+        if (!e.alive) continue;
+        const d = Math.sqrt((e.x - player.x) ** 2 + (e.y - player.y) ** 2);
+        if (d < this.range + e.radius) {
+          e.takeDamage(Math.round(this.damage * 0.15));
+          e.slowMultiplier = Math.min(e.slowMultiplier, this.slowFactor);
+        }
+      }
+    }
+    // Big pulse
+    if (this.pulseTimer >= this.pulseCooldown) {
+      this.pulseTimer = 0;
+      for (const e of enemies) {
+        if (!e.alive) continue;
+        const d = Math.sqrt((e.x - player.x) ** 2 + (e.y - player.y) ** 2);
+        if (d < this.range + e.radius) e.takeDamage(this.damage);
+      }
+      this.pulseEffects.push(new ExplosionEffect(player.x, player.y, this.range, 0.5, '#80d8ff'));
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, player: Player): void {
+    const s = camera.worldToScreen(player.x, player.y);
+    ctx.save();
+    ctx.strokeStyle = '#80d8ff'; ctx.globalAlpha = 0.22; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(s.x, s.y, this.range, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    for (const fx of this.pulseEffects) fx.draw(ctx, camera);
+  }
+}
+
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
 export type AnyWeapon = Weapon;
 
 export function createWeaponByName(name: string): AnyWeapon | null {
   switch (name) {
-    case 'Laser':        return new MagicBolt();
-    case 'Plasma Whip':  return new Whip();
-    case 'Plasma Bomb':  return new Fireball();
-    case 'Ion Chain':    return new Lightning();
-    case 'Force Field':  return new Aura();
-    case 'Beam Lash':    return new ThunderStrike();
-    case 'Dark Matter':  return new VoidOrb();
-    case 'Nova Burst':   return new Inferno();
-    default:             return null;
+    case 'Laser':           return new MagicBolt();
+    case 'Plasma Whip':     return new Whip();
+    case 'Plasma Bomb':     return new Fireball();
+    case 'Ion Chain':       return new Lightning();
+    case 'Force Field':     return new Aura();
+    case 'Missile Barrage': return new MissileBarrage();
+    case 'Pulse Cannon':    return new PulseCannon();
+    case 'Cryo Beam':       return new CryoBeam();
+    case 'Beam Lash':       return new ThunderStrike();
+    case 'Dark Matter':     return new VoidOrb();
+    case 'Nova Burst':      return new Inferno();
+    case 'Solar Flare':     return new SolarFlare();
+    case 'Quantum Torpedo': return new QuantumTorpedo();
+    case 'Glacial Storm':   return new GlacialStorm();
+    default:                return null;
   }
 }

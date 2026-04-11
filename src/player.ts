@@ -75,6 +75,22 @@ export class Player {
   armorUpgrades = 0;
   /** How many "Shield Capacity Up" upgrades have been taken. */
   hpUpgrades = 0;
+  /** How many "Burn Catalyst" upgrades have been taken. */
+  burnUpgrades = 0;
+  /** How many "Toxin Core" upgrades have been taken. */
+  poisonUpgrades = 0;
+
+  /**
+   * Probability (0–1) that a hit applies a burn DoT.
+   * Incremented by Burn Catalyst upgrade entries.
+   */
+  burnChance: number = 0;
+
+  /**
+   * Probability (0–1) that a hit applies a poison DoT.
+   * Incremented by Toxin Core upgrade entries.
+   */
+  poisonChance: number = 0;
 
   // ── Facing / animation ─────────────────────────────────────────────────────
   /**

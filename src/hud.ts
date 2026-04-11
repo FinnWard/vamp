@@ -4,10 +4,12 @@
 // camera movement.
 //
 // Layout (top to bottom):
-//   Top-left   — Shield (HP) bar and XP / Level bar
-//   Top-centre — Elapsed time
-//   Top-right  — Kill counter
-//   Bottom     — Weapon icons (one per active weapon, centred)
+//   Top-left    — Shield (HP) bar and XP / Level bar
+//   Top-centre  — Elapsed time
+//   Top-right   — Kill counter
+//   Centre-top  — Boss HP bar (shown only when a boss is alive)
+//   Bottom-left — Weapon icons
+//   Bottom-right— Minimap
 //
 // Pixel sprites
 // ──────────────
@@ -26,6 +28,7 @@
 import type { Player } from './player';
 import type { LevelUpManager } from './levelup';
 import type { Weapon } from './weapons';
+import type { Enemy } from './enemies';
 
 // ─── Pixel sprite definitions (8×8 grid, '.' = transparent) ──────────────────
 // Each weapon in the game has a matching entry here so its icon can be drawn
@@ -113,6 +116,16 @@ const WEAPON_SPRITE_GRIDS: Record<string, string[]> = {
     '1..1..1.',
     '........',
   ],
+  'Gravity Well': [
+    '...11...',
+    '..1221..',
+    '.122221.',
+    '12222221',
+    '12222221',
+    '.122221.',
+    '..1221..',
+    '...11...',
+  ],
   'Beam Lash': [
     '.....111',
     '...111..',
@@ -189,6 +202,7 @@ const WEAPON_SPRITE_COLORS: Record<string, [string, string]> = {
   'Missile Barrage': ['#ff6d00', '#ffab40'],
   'Pulse Cannon':    ['#ffd740', '#fff9c4'],
   'Cryo Beam':       ['#80d8ff', '#e1f5fe'],
+  'Gravity Well':    ['#ce93d8', '#e040fb'],
   'Beam Lash':       ['#69ffdf', '#b2dfdb'],
   'Dark Matter':     ['#e040fb', '#ea80fc'],
   'Nova Burst':      ['#00b0ff', '#80d8ff'],
@@ -209,6 +223,8 @@ export class HUD {
    * @param elapsed      Total seconds elapsed since the game started.
    * @param kills        Total enemy kill count.
    * @param weapons      All currently equipped weapons.
+   * @param enemies      All currently active enemies (used for minimap dots).
+   * @param boss         Active boss enemy, or null (for boss HP bar).
    */
   draw(
     ctx: CanvasRenderingContext2D,
@@ -218,6 +234,8 @@ export class HUD {
     elapsed: number,
     kills: number,
     weapons: Weapon[],
+    enemies: Enemy[] = [],
+    boss: Enemy | null = null,
   ): void {
     // Scale all HUD elements relative to canvas width so it looks good on mobile.
     // At 480 px wide s = 1, at 1200 px wide s = 2.5 (capped).
@@ -246,6 +264,11 @@ export class HUD {
     // Offset left of the canvas edge to avoid the ⏸ pause button
     ctx.fillText(`✦ ${kills}`, canvas.width - pad - Math.round(44 * s), Math.round(18 * s));
     ctx.restore();
+
+    // ── Boss HP bar (top-centre, below timer) ─────────────────────────────────
+    if (boss !== null && boss.alive) {
+      this.drawBossBar(ctx, canvas, boss, s);
+    }
 
     // ── Weapon icons (bottom-centre) ──────────────────────────────────────────
     const iconW = Math.round(92 * s);  // total icon card width
@@ -286,6 +309,114 @@ export class HUD {
 
       wx += iconW + iconGap; // advance to next card position
     }
+    ctx.restore();
+
+    // ── Minimap (bottom-right) ────────────────────────────────────────────────
+    this.drawMinimap(ctx, canvas, player, enemies, s, pad);
+  }
+
+  // ─── Boss HP bar ────────────────────────────────────────────────────────────
+
+  /**
+   * Draws a centred boss HP bar below the timer at the top of the screen.
+   * The bar is red and shows the boss name + HP fraction.
+   */
+  private drawBossBar(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    boss: Enemy,
+    s: number,
+  ): void {
+    const bossBarW = Math.round(Math.min(canvas.width * 0.55, 340 * s));
+    const bossBarH = Math.round(12 * s);
+    const bx = Math.round((canvas.width - bossBarW) / 2);
+    const by = Math.round(28 * s);
+    const hpFrac = Math.max(0, boss.hp / boss.maxHp);
+
+    ctx.save();
+    // Background gutter
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(bx - 2, by - 2, bossBarW + 4, bossBarH + 4);
+    // Track
+    ctx.fillStyle = '#4a0000';
+    ctx.fillRect(bx, by, bossBarW, bossBarH);
+    // HP fill (color changes as HP drops)
+    const hpColor = hpFrac > 0.5 ? '#ff1744' : hpFrac > 0.25 ? '#ff6d00' : '#ffd740';
+    ctx.fillStyle = hpColor;
+    ctx.fillRect(bx, by, Math.round(bossBarW * hpFrac), bossBarH);
+    // Scanline overlay
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    for (let row = by; row < by + bossBarH; row += 2) {
+      ctx.fillRect(bx, row, Math.round(bossBarW * hpFrac), 1);
+    }
+    // Label
+    ctx.font = `${Math.round(6 * s)}px "Press Start 2P", monospace`;
+    ctx.fillStyle = '#ffcdd2';
+    ctx.textAlign = 'center';
+    const hpPct = Math.round(hpFrac * 100);
+    ctx.fillText(`⚡ BOSS  ${hpPct}%`, canvas.width / 2, by + bossBarH - Math.round(1 * s));
+    ctx.restore();
+  }
+
+  // ─── Minimap ────────────────────────────────────────────────────────────────
+
+  /**
+   * Draws a small circular minimap at the bottom-right of the screen.
+   * Shows the player as a white dot at centre and enemy positions as red dots.
+   * The minimap covers a 600×600 world-space area (300 px radius).
+   */
+  private drawMinimap(
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    player: Player,
+    enemies: Enemy[],
+    s: number,
+    pad: number,
+  ): void {
+    const mapSize  = Math.round(70 * s);    // total map square size
+    const mapX     = canvas.width  - pad - mapSize;
+    const mapY     = canvas.height - pad - mapSize;
+    const mapCX    = mapX + mapSize / 2;    // map centre screen x
+    const mapCY    = mapY + mapSize / 2;    // map centre screen y
+    const worldRange = 600;                 // world-space half-width shown on map
+
+    ctx.save();
+
+    // Clip to the map square
+    ctx.beginPath();
+    ctx.rect(mapX, mapY, mapSize, mapSize);
+    ctx.clip();
+
+    // Background
+    ctx.fillStyle = 'rgba(0,5,20,0.72)';
+    ctx.fillRect(mapX, mapY, mapSize, mapSize);
+
+    // Enemy dots
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const ex = mapCX + ((e.x - player.x) / worldRange) * (mapSize / 2);
+      const ey = mapCY + ((e.y - player.y) / worldRange) * (mapSize / 2);
+      if (ex < mapX || ex > mapX + mapSize || ey < mapY || ey > mapY + mapSize) continue;
+      ctx.fillStyle = e.isBoss ? '#ffd740' : '#ff1744';
+      const dotR = e.isBoss ? Math.round(3 * s) : Math.round(1.5 * s);
+      ctx.beginPath();
+      ctx.arc(ex, ey, dotR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Player dot (always centred, white)
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(mapCX, mapCY, Math.round(2.5 * s), 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    // Border ring
+    ctx.save();
+    ctx.strokeStyle = '#0d47a1';
+    ctx.lineWidth = Math.round(1.5 * s);
+    ctx.strokeRect(mapX, mapY, mapSize, mapSize);
     ctx.restore();
   }
 

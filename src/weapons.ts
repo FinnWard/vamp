@@ -68,6 +68,8 @@ export interface Weapon {
   draw?(ctx: CanvasRenderingContext2D, camera: Camera, player: Player): void;
   /** Scale cooldown by speedMult and damage by damageMult (for global powerups). */
   scaleStats(speedMult: number, damageMult: number): void;
+  /** Cumulative damage dealt this run (tracked per weapon for post-run stats). */
+  totalDamageDealt?: number;
 }
 
 // ─── Visual: explosion ring effect ───────────────────────────────────────────
@@ -137,6 +139,7 @@ export class MagicBolt implements Weapon {
   speed = 380;
   projectileRadius = 6;
   pierce = 0;
+  totalDamageDealt = 0;
   private readonly color = '#00e5ff';
   private timer = 0;
 
@@ -176,7 +179,8 @@ export class MagicBolt implements Weapon {
     const dy = nearest.y - player.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     pool.spawn(player.x, player.y, (dx / dist) * this.speed, (dy / dist) * this.speed,
-      this.damage, this.projectileRadius, this.pierce, this.color);
+      this.damage, this.projectileRadius, this.pierce, this.color,
+      (dmg) => { this.totalDamageDealt += dmg; });
   }
 }
 
@@ -188,6 +192,7 @@ export class Whip implements Weapon {
   cooldown = 1.2;
   damage = 30;
   range = 120;
+  totalDamageDealt = 0;
   private readonly arcAngle = Math.PI * 0.8;
   private readonly swingDuration = 0.18;
   private readonly color = '#40c4ff';
@@ -239,7 +244,7 @@ export class Whip implements Weapon {
       if (dist > this.range) continue;
       let diff = Math.abs(Math.atan2(dy, dx) - angle);
       if (diff > Math.PI) diff = Math.PI * 2 - diff;
-      if (diff < this.arcAngle / 2) e.takeDamage(this.damage);
+      if (diff < this.arcAngle / 2) { e.takeDamage(this.damage); this.totalDamageDealt += this.damage; }
     }
   }
 
@@ -307,6 +312,7 @@ export class Fireball implements Weapon {
   readonly name = 'Plasma Bomb'; readonly isEvolution = false; level = 1;
   cooldown = 2.0; damage = 25; speed = 110;
   readonly orbRadius = 18; explosionRadius = 90;
+  totalDamageDealt = 0;
   private timer = 0; private orbs: FireOrb[] = []; private effects: ExplosionEffect[] = [];
   private cameraRef: Camera | null = null;
 
@@ -358,6 +364,7 @@ export class Fireball implements Weapon {
 export class Lightning implements Weapon {
   readonly name = 'Ion Chain'; readonly isEvolution = false; level = 1;
   cooldown = 0.45; damage = 22; chains = 3;
+  totalDamageDealt = 0;
   private timer = 0; private flashes: LightningFlash[] = [];
 
   getStats(): string { return `DMG:${this.damage} Chains:${this.chains} Rate:${(1 / this.cooldown).toFixed(1)}/s`; }
@@ -388,6 +395,7 @@ export class Lightning implements Weapon {
     let prevX = player.x, prevY = player.y;
     for (const t of targets) {
       t.takeDamage(this.damage);
+      this.totalDamageDealt += this.damage;
       segs.push({ x1: prevX, y1: prevY, x2: t.x, y2: t.y });
       prevX = t.x; prevY = t.y;
     }
@@ -404,6 +412,7 @@ export class Lightning implements Weapon {
 export class Aura implements Weapon {
   readonly name = 'Force Field'; readonly isEvolution = false; level = 1;
   cooldown = 1.5; damage = 20; range = 80;
+  totalDamageDealt = 0;
   private timer = 0; private pulseEffects: ExplosionEffect[] = [];
 
   getStats(): string { return `DMG:${this.damage} Range:${this.range} Rate:${(1 / this.cooldown).toFixed(1)}/s`; }
@@ -428,7 +437,10 @@ export class Aura implements Weapon {
     for (const e of enemies) {
       if (!e.alive) continue;
       const dx = e.x - player.x, dy = e.y - player.y;
-      if (Math.sqrt(dx * dx + dy * dy) < this.range + e.radius) e.takeDamage(this.damage);
+      if (Math.sqrt(dx * dx + dy * dy) < this.range + e.radius) {
+        e.takeDamage(this.damage);
+        this.totalDamageDealt += this.damage;
+      }
     }
     this.pulseEffects.push(new ExplosionEffect(player.x, player.y, this.range, 0.45, '#40c4ff'));
   }
@@ -746,6 +758,7 @@ class HomingMissile {
 export class MissileBarrage implements Weapon {
   readonly name = 'Missile Barrage'; readonly isEvolution = false; level = 1;
   cooldown = 1.8; damage = 35; count = 1; explosionRadius = 70;
+  totalDamageDealt = 0;
   private timer = 0; private missiles: HomingMissile[] = []; private effects: ExplosionEffect[] = [];
   private cameraRef: Camera | null = null;
 
@@ -795,6 +808,7 @@ export class MissileBarrage implements Weapon {
 export class PulseCannon implements Weapon {
   readonly name = 'Pulse Cannon'; readonly isEvolution = false; level = 1;
   cooldown = 1.6; damage = 18; directions = 4;
+  totalDamageDealt = 0;
   private timer = 0;
   private readonly color = '#ffd740';
 
@@ -817,7 +831,8 @@ export class PulseCannon implements Weapon {
     for (let i = 0; i < this.directions; i++) {
       const angle = (i / this.directions) * Math.PI * 2;
       pool.spawn(player.x, player.y, Math.cos(angle) * 340, Math.sin(angle) * 340,
-        this.damage, 7, 0, this.color);
+        this.damage, 7, 0, this.color,
+        (dmg) => { this.totalDamageDealt += dmg; });
     }
   }
 }
@@ -827,6 +842,7 @@ export class PulseCannon implements Weapon {
 export class CryoBeam implements Weapon {
   readonly name = 'Cryo Beam'; readonly isEvolution = false; level = 1;
   cooldown = 0.25; damage = 8; range = 220; slowFactor = 0.5;
+  totalDamageDealt = 0;
   private timer = 0;
   private beamTarget: { x: number; y: number } | null = null;
   private beamAge = 0;
@@ -857,6 +873,7 @@ export class CryoBeam implements Weapon {
       if (this.timer >= this.cooldown) {
         this.timer = 0;
         nearest.takeDamage(this.damage);
+        this.totalDamageDealt += this.damage;
         nearest.slowMultiplier = Math.min(nearest.slowMultiplier, this.slowFactor);
       }
     } else {
@@ -1016,6 +1033,126 @@ export class GlacialStorm implements Weapon {
   }
 }
 
+// ─── Weapon: Gravity Well ─────────────────────────────────────────────────────
+// Creates a gravitational singularity at the player's position that pulls
+// nearby enemies inward for pullDuration seconds then detonates, dealing
+// damage that scales with how close each enemy was to the epicentre.
+
+export class GravityWell implements Weapon {
+  readonly name = 'Gravity Well';
+  readonly isEvolution = false;
+  level = 1;
+  cooldown = 5.5;
+  damage = 55;
+  pullRadius = 200;
+  pullDuration = 2.0;
+  totalDamageDealt = 0;
+  private timer = 0;
+  private active = false;
+  private activeTimer = 0;
+  private wellX = 0;
+  private wellY = 0;
+  private pulseEffects: ExplosionEffect[] = [];
+
+  getStats(): string { return `DMG:${this.damage} Pull:${this.pullRadius}px CD:${this.cooldown.toFixed(1)}s`; }
+
+  upgrade(stat: 'damage' | 'radius' | 'rate'): void {
+    if (stat === 'damage') { this.damage = Math.round(this.damage * 1.35); this.level++; }
+    else if (stat === 'radius') { this.pullRadius += 40; this.level++; }
+    else if (stat === 'rate') { this.cooldown = Math.max(2.5, this.cooldown * 0.80); this.level++; }
+  }
+
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult;
+    this.damage = Math.round(this.damage * damageMult);
+  }
+
+  update(dt: number, player: Player, enemies: Enemy[], _pool: ProjectilePool): void {
+    for (const fx of this.pulseEffects) fx.update(dt);
+    this.pulseEffects = this.pulseEffects.filter(fx => !fx.done);
+
+    if (this.active) {
+      this.activeTimer += dt;
+
+      // Pull living enemies toward the well centre
+      for (const e of enemies) {
+        if (!e.alive) continue;
+        const dx = this.wellX - e.x;
+        const dy = this.wellY - e.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 0 && dist < this.pullRadius) {
+          const pullStr = 180 * (1 - dist / this.pullRadius) * dt;
+          e.x += (dx / dist) * pullStr;
+          e.y += (dy / dist) * pullStr;
+        }
+      }
+
+      // Detonate when the active timer expires
+      if (this.activeTimer >= this.pullDuration) {
+        this.active = false;
+        this.activeTimer = 0;
+        for (const e of enemies) {
+          if (!e.alive) continue;
+          const dx = this.wellX - e.x;
+          const dy = this.wellY - e.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < this.pullRadius + e.radius) {
+            const d = Math.round(this.damage * (1 + 0.5 * Math.max(0, 1 - dist / this.pullRadius)));
+            e.takeDamage(d);
+            this.totalDamageDealt += d;
+          }
+        }
+        this.pulseEffects.push(new ExplosionEffect(this.wellX, this.wellY, this.pullRadius, 0.5, '#ce93d8'));
+      }
+    } else {
+      this.timer += dt;
+      if (this.timer >= this.cooldown) {
+        this.timer = 0;
+        this.active = true;
+        this.activeTimer = 0;
+        this.wellX = player.x;
+        this.wellY = player.y;
+      }
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, _player: Player): void {
+    for (const fx of this.pulseEffects) fx.draw(ctx, camera);
+    if (!this.active) return;
+    const s = camera.worldToScreen(this.wellX, this.wellY);
+    const t = this.activeTimer / this.pullDuration;
+
+    ctx.save();
+    // Outer pull-field ring
+    ctx.globalAlpha = 0.18 + t * 0.30;
+    ctx.strokeStyle = '#ce93d8';
+    ctx.shadowColor = '#ce93d8';
+    ctx.shadowBlur = 16;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, this.pullRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    // Rotating inner rings (cosmetic)
+    for (let r = 0; r < 2; r++) {
+      const ringR = this.pullRadius * (0.45 + r * 0.25);
+      const rot   = (Date.now() / 1000) * (r % 2 === 0 ? 1.5 : -1.5);
+      ctx.globalAlpha = 0.30 + t * 0.35;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, ringR, rot, rot + Math.PI * 1.5);
+      ctx.stroke();
+    }
+    // Core singularity
+    ctx.globalAlpha = 0.75 + t * 0.25;
+    ctx.fillStyle = '#e040fb';
+    ctx.shadowBlur = 20;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 6 + t * 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 // ─── Factory ──────────────────────────────────────────────────────────────────
 // createWeaponByName() is the single place that maps string weapon names to
 // concrete class instances.  It is called by main.ts's addWeapon() helper
@@ -1038,6 +1175,7 @@ export function createWeaponByName(name: string): AnyWeapon | null {
     case 'Missile Barrage': return new MissileBarrage();
     case 'Pulse Cannon':    return new PulseCannon();
     case 'Cryo Beam':       return new CryoBeam();
+    case 'Gravity Well':    return new GravityWell();
     case 'Beam Lash':       return new ThunderStrike();
     case 'Dark Matter':     return new VoidOrb();
     case 'Nova Burst':      return new Inferno();

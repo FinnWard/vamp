@@ -438,6 +438,49 @@ const UPGRADE_POOL: Upgrade[] = [
     apply: (_w, _add, player) => { player.hp = Math.min(player.hp + 40, player.maxHp); },
     requires: (_w, player) => player.hp < player.maxHp * 0.9,
   },
+  // ── Burn Catalyst ──────────────────────────────────────────────────────────
+  {
+    id: 'gen_burn_1', label: '🔥 Burn Catalyst I', desc: '+30% chance to ignite enemies on hit',
+    apply: (_w, _add, player) => { player.burnChance += 0.30; player.burnUpgrades++; },
+    requires: (_w, player) => player.burnUpgrades < MAX_GENERIC_UPGRADES,
+  },
+  {
+    id: 'gen_burn_2', label: '🔥 Burn Catalyst II', desc: '+30% burn chance (stacks)',
+    apply: (_w, _add, player) => { player.burnChance += 0.30; player.burnUpgrades++; },
+    requires: (_w, player) => player.burnUpgrades >= 1 && player.burnUpgrades < MAX_GENERIC_UPGRADES,
+  },
+  // ── Toxin Core ─────────────────────────────────────────────────────────────
+  {
+    id: 'gen_poison_1', label: '☠ Toxin Core I', desc: '+30% chance to poison enemies on hit',
+    apply: (_w, _add, player) => { player.poisonChance += 0.30; player.poisonUpgrades++; },
+    requires: (_w, player) => player.poisonUpgrades < MAX_GENERIC_UPGRADES,
+  },
+  {
+    id: 'gen_poison_2', label: '☠ Toxin Core II', desc: '+30% poison chance (stacks)',
+    apply: (_w, _add, player) => { player.poisonChance += 0.30; player.poisonUpgrades++; },
+    requires: (_w, player) => player.poisonUpgrades >= 1 && player.poisonUpgrades < MAX_GENERIC_UPGRADES,
+  },
+  // ── Gravity Well weapon ────────────────────────────────────────────────────
+  {
+    id: 'add_gravity_well', label: '🌀 Unlock Gravity Well', desc: 'New weapon: pulls & detonates',
+    apply: (_w, add) => add('Gravity Well'),
+    requires: (w) => !w.some(x => x.name === 'Gravity Well') && w.length < MAX_WEAPON_SLOTS,
+  },
+  {
+    id: 'gravity_well_damage', label: '🌀 Gravity Well – Damage Up', desc: '+35% detonation damage',
+    apply: (w) => upgradeWeapon(w, 'Gravity Well', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Gravity Well' && !x.isEvolution) && weaponLevel(w, 'Gravity Well') < MAX_BASE_WEAPON_LEVEL,
+  },
+  {
+    id: 'gravity_well_radius', label: '🌀 Gravity Well – Pull Radius', desc: '+40px pull radius',
+    apply: (w) => upgradeWeapon(w, 'Gravity Well', 'radius'),
+    requires: (w) => w.some(x => x.name === 'Gravity Well' && !x.isEvolution) && weaponLevel(w, 'Gravity Well') < MAX_BASE_WEAPON_LEVEL,
+  },
+  {
+    id: 'gravity_well_rate', label: '🌀 Gravity Well – Cooldown Down', desc: '−20% cooldown',
+    apply: (w) => upgradeWeapon(w, 'Gravity Well', 'rate'),
+    requires: (w) => w.some(x => x.name === 'Gravity Well' && !x.isEvolution) && weaponLevel(w, 'Gravity Well') < MAX_BASE_WEAPON_LEVEL,
+  },
 ];
 
 export class LevelUpManager {

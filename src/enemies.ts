@@ -11,6 +11,7 @@
 //   ranged      — maintains a preferred distance, strafes at close range
 //   splitter    — on death splits into two splitterlets
 //   splitterlet — small fast child of the splitter
+//   boss        — massive elite enemy spawning every 120 s; has its own HP bar
 //
 // HP scaling
 // ───────────
@@ -22,6 +23,19 @@
 // Weapons like Cryo Beam set enemy.slowMultiplier < 1.  The multiplier
 // recovers toward 1.0 at a fixed rate each frame (1.5 × dt per second).
 // All movement calculations multiply speed by this value.
+//
+// DoT mechanic
+// ─────────────
+// Call applyBurn() or applyPoison() to start a damage-over-time effect.
+// The DoT ticks every DOT_TICK_INTERVAL seconds for its remaining duration.
+// Damage events from DoT ticks are appended to the exported damageEvents array
+// so main.ts can spawn floating damage numbers.
+//
+// Boss spawning
+// ─────────────
+// EnemySpawner.bossTimer accumulates elapsed seconds.  Every BOSS_SPAWN_INTERVAL
+// seconds a boss is spawned at a random off-screen position.  At most one boss
+// can be active at a time (additional spawns are skipped while one is alive).
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { circlesOverlap, randomRange } from './utils';
@@ -31,7 +45,7 @@ import type { Player } from './player';
 // ─── Type definitions ─────────────────────────────────────────────────────────
 
 /** String literal union of all possible enemy variants. */
-type EnemyType = 'grunt' | 'fast' | 'tank' | 'charger' | 'ranged' | 'splitter' | 'splitterlet';
+type EnemyType = 'grunt' | 'fast' | 'tank' | 'charger' | 'ranged' | 'splitter' | 'splitterlet' | 'boss';
 
 /** Base stat block defined once per enemy type. */
 interface EnemyStats {
@@ -53,6 +67,51 @@ const HP_SCALE_LINEAR_PER_MIN = 0.25;
 /** HP multiplier applied multiplicatively per minute of real-time elapsed. */
 const HP_SCALE_MULT_PER_MIN = 1.04;
 
+/** Seconds between boss spawns. */
+const BOSS_SPAWN_INTERVAL = 120;
+
+/** Seconds between each DoT damage tick. */
+const DOT_TICK_INTERVAL = 0.5;
+
+// ─── Damage event bus ─────────────────────────────────────────────────────────
+
+/** Filled by Enemy.takeDamage() each frame; main.ts drains this for floating numbers. */
+export interface DamageEvent {
+  x: number;
+  y: number;
+  amount: number;
+  isBoss: boolean;
+}
+
+export const damageEvents: DamageEvent[] = [];
+
+// ─── Module-level DoT chance state (set from main.ts each frame) ──────────────
+
+let _burnChance   = 0;
+let _poisonChance = 0;
+
+/**
+ * Called from main.ts each frame with the player's current DoT chance stats.
+ * Enemies use these values in takeDamage() to conditionally apply status effects.
+ */
+export function setDoTChances(burnChance: number, poisonChance: number): void {
+  _burnChance   = burnChance;
+  _poisonChance = poisonChance;
+}
+
+// ─── Difficulty multiplier (set from main.ts once on game start) ──────────────
+
+let _diffHpMult     = 1.0;
+let _diffDamageMult = 1.0;
+let _diffSpeedMult  = 1.0;
+
+/** Set enemy HP / damage / spawn-rate multipliers for the chosen difficulty. */
+export function setDifficultyMultipliers(hp: number, damage: number, speed: number): void {
+  _diffHpMult     = hp;
+  _diffDamageMult = damage;
+  _diffSpeedMult  = speed;
+}
+
 // ─── Base stat table ──────────────────────────────────────────────────────────
 
 /**
@@ -60,13 +119,14 @@ const HP_SCALE_MULT_PER_MIN = 1.04;
  * HP is scaled at construction time by the EnemySpawner's hpScale() value.
  */
 const ENEMY_TYPES: Record<EnemyType, EnemyStats> = {
-  grunt:      { radius: 16, speed: 90,  hp: 18, damage: 12, xpValue: 1, color: '#e53935' },
-  fast:       { radius: 12, speed: 155, hp: 10, damage: 8,  xpValue: 1, color: '#ff7043' },
-  tank:       { radius: 26, speed: 52,  hp: 70, damage: 20, xpValue: 3, color: '#7b1fa2' },
-  charger:    { radius: 15, speed: 85,  hp: 25, damage: 18, xpValue: 2, color: '#f57f17' },
-  ranged:     { radius: 13, speed: 75,  hp: 12, damage: 10, xpValue: 2, color: '#00897b' },
-  splitter:   { radius: 22, speed: 55,  hp: 45, damage: 15, xpValue: 3, color: '#558b2f' },
-  splitterlet:{ radius: 9,  speed: 120, hp: 8,  damage: 6,  xpValue: 1, color: '#8bc34a' },
+  grunt:      { radius: 16, speed: 90,  hp: 18,  damage: 12, xpValue: 1,  color: '#e53935' },
+  fast:       { radius: 12, speed: 155, hp: 10,  damage: 8,  xpValue: 1,  color: '#ff7043' },
+  tank:       { radius: 26, speed: 52,  hp: 70,  damage: 20, xpValue: 3,  color: '#7b1fa2' },
+  charger:    { radius: 15, speed: 85,  hp: 25,  damage: 18, xpValue: 2,  color: '#f57f17' },
+  ranged:     { radius: 13, speed: 75,  hp: 12,  damage: 10, xpValue: 2,  color: '#00897b' },
+  splitter:   { radius: 22, speed: 55,  hp: 45,  damage: 15, xpValue: 3,  color: '#558b2f' },
+  splitterlet:{ radius: 9,  speed: 120, hp: 8,   damage: 6,  xpValue: 1,  color: '#8bc34a' },
+  boss:       { radius: 42, speed: 40,  hp: 600, damage: 30, xpValue: 20, color: '#b71c1c' },
 };
 
 // ─── Enemy ────────────────────────────────────────────────────────────────────
@@ -77,6 +137,9 @@ export class Enemy {
   y: number;
 
   readonly type: EnemyType;
+
+  /** True when this enemy is the special boss type. */
+  get isBoss(): boolean { return this.type === 'boss'; }
 
   /** False once HP reaches 0. EnemySpawner.collectDead() removes dead enemies. */
   alive: boolean = true;
@@ -128,6 +191,21 @@ export class Enemy {
   /** The distance (world px) the ranged enemy tries to maintain from the player. */
   private static readonly RANGED_PREF_DIST = 220;
 
+  // ── DoT state ─────────────────────────────────────────────────────────────
+  /** Remaining seconds of burn damage. 0 = not burning. */
+  burnTimer: number = 0;
+  /** Damage-per-second while burning. */
+  burnDps: number = 0;
+  /** Countdown to next burn tick. */
+  private _burnTickTimer: number = 0;
+
+  /** Remaining seconds of poison damage. 0 = not poisoned. */
+  poisonTimer: number = 0;
+  /** Damage-per-second while poisoned. */
+  poisonDps: number = 0;
+  /** Countdown to next poison tick. */
+  private _poisonTickTimer: number = 0;
+
   constructor(x: number, y: number, type: EnemyType = 'grunt', hpMultiplier: number = 1) {
     this.x = x;
     this.y = y;
@@ -139,11 +217,11 @@ export class Enemy {
     this.radius = stats.radius;
     // Cap speed at MAX_ENEMY_SPEED at construction too (defense in depth)
     this.speed = Math.min(stats.speed, MAX_ENEMY_SPEED);
-    const scaledHp = Math.round(stats.hp * hpMultiplier);
+    const scaledHp = Math.round(stats.hp * hpMultiplier * _diffHpMult);
     this.hpMultiplier = hpMultiplier;
     this.maxHp = scaledHp;
     this.hp = scaledHp;
-    this.damage = stats.damage;
+    this.damage = stats.damage * _diffDamageMult;
     this.xpValue = stats.xpValue;
     this.color = stats.color;
 
@@ -154,9 +232,37 @@ export class Enemy {
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
-  /** Reduces HP; sets alive = false when HP hits zero or below. */
+  /**
+   * Apply a burn DoT effect.  Stacks by taking the higher DPS / longer duration.
+   *
+   * @param dps      Damage per second
+   * @param duration Seconds the burn lasts
+   */
+  applyBurn(dps: number, duration: number): void {
+    this.burnDps   = Math.max(this.burnDps, dps);
+    this.burnTimer = Math.max(this.burnTimer, duration);
+  }
+
+  /**
+   * Apply a poison DoT effect.  Stacks by taking the higher DPS / longer duration.
+   */
+  applyPoison(dps: number, duration: number): void {
+    this.poisonDps   = Math.max(this.poisonDps, dps);
+    this.poisonTimer = Math.max(this.poisonTimer, duration);
+  }
+
+  /** Reduces HP; sets alive = false when HP hits zero or below.
+   *  Conditionally applies Burn / Poison based on the global DoT chances. */
   takeDamage(amount: number): void {
     this.hp -= amount;
+    damageEvents.push({ x: this.x, y: this.y, amount, isBoss: this.isBoss });
+    // Apply DoT status effects based on player's accumulated upgrade stats
+    if (_burnChance > 0 && Math.random() < _burnChance) {
+      this.applyBurn(12, 3.0);
+    }
+    if (_poisonChance > 0 && Math.random() < _poisonChance) {
+      this.applyPoison(8, 5.0);
+    }
     if (this.hp <= 0) {
       this.hp = 0;
       this.alive = false;
@@ -172,6 +278,33 @@ export class Enemy {
    */
   update(dt: number, player: Player): void {
     if (!this.alive) return;
+
+    // ── DoT tick processing ──────────────────────────────────────────────────
+    if (this.burnTimer > 0) {
+      this.burnTimer -= dt;
+      this._burnTickTimer -= dt;
+      if (this._burnTickTimer <= 0) {
+        this._burnTickTimer = DOT_TICK_INTERVAL;
+        const dmg = this.burnDps * DOT_TICK_INTERVAL;
+        this.hp -= dmg;
+        damageEvents.push({ x: this.x, y: this.y, amount: dmg, isBoss: this.isBoss });
+        if (this.hp <= 0) { this.hp = 0; this.alive = false; return; }
+      }
+      if (this.burnTimer <= 0) { this.burnDps = 0; this._burnTickTimer = 0; }
+    }
+
+    if (this.poisonTimer > 0) {
+      this.poisonTimer -= dt;
+      this._poisonTickTimer -= dt;
+      if (this._poisonTickTimer <= 0) {
+        this._poisonTickTimer = DOT_TICK_INTERVAL;
+        const dmg = this.poisonDps * DOT_TICK_INTERVAL;
+        this.hp -= dmg;
+        damageEvents.push({ x: this.x, y: this.y, amount: dmg, isBoss: this.isBoss });
+        if (this.hp <= 0) { this.hp = 0; this.alive = false; return; }
+      }
+      if (this.poisonTimer <= 0) { this.poisonDps = 0; this._poisonTickTimer = 0; }
+    }
 
     // Slow recovery: creep slowMultiplier back toward 1.0 over time
     if (this.slowMultiplier < 1.0) {
@@ -191,7 +324,7 @@ export class Enemy {
     } else if (this.type === 'ranged') {
       this._updateRanged(dt, dist, ndx, ndy);
     } else {
-      // Standard homing movement (grunt, fast, tank, splitter, splitterlet)
+      // Standard homing movement (grunt, fast, tank, splitter, splitterlet, boss)
       const effectiveSpeed = Math.min(this.speed, MAX_ENEMY_SPEED) * this.slowMultiplier;
       this.x += ndx * effectiveSpeed * dt;
       this.y += ndy * effectiveSpeed * dt;
@@ -294,19 +427,37 @@ export class Enemy {
       this._drawSplitter(ctx);
     } else if (this.type === 'splitterlet') {
       this._drawSplitterlet(ctx);
+    } else if (this.type === 'boss') {
+      this._drawBoss(ctx);
     } else {
       this._drawTank(ctx);
     }
 
     // HP bar (drawn in local space, above the sprite)
-    const barW = this.radius * 2;
-    const barH = 3;
-    const bx = -this.radius;             // left edge aligned with collision circle
-    const by = -this.radius - 7;         // above the sprite
-    ctx.fillStyle = '#1a1a2e';           // dark background track
+    // Boss uses a thicker bar; regular enemies use a thin 3 px bar
+    const barW = this.type === 'boss' ? this.radius * 2.5 : this.radius * 2;
+    const barH = this.type === 'boss' ? 6 : 3;
+    const bx = -barW / 2;
+    const by = -this.radius - (this.type === 'boss' ? 12 : 7);
+    ctx.fillStyle = '#1a1a2e';
     ctx.fillRect(bx, by, barW, barH);
-    ctx.fillStyle = '#ff1744';           // red fill proportional to remaining HP
+    const hpColor = this.type === 'boss' ? '#ff1744' : '#ff1744';
+    ctx.fillStyle = hpColor;
     ctx.fillRect(bx, by, Math.round(barW * (this.hp / this.maxHp)), barH);
+
+    // DoT indicators: small colored dots above the HP bar
+    if (this.burnTimer > 0 || this.poisonTimer > 0) {
+      let dotX = bx;
+      if (this.burnTimer > 0) {
+        ctx.fillStyle = '#ff6d00';
+        ctx.fillRect(dotX, by - 5, 4, 4);
+        dotX += 6;
+      }
+      if (this.poisonTimer > 0) {
+        ctx.fillStyle = '#76ff03';
+        ctx.fillRect(dotX, by - 5, 4, 4);
+      }
+    }
 
     ctx.restore();
   }
@@ -519,6 +670,59 @@ export class Enemy {
     ctx.fillStyle = '#1b5e20';
     ctx.fillRect(-1, -2, 2, 1);
   }
+
+  private _drawBoss(ctx: CanvasRenderingContext2D): void {
+    // Massive armored boss — a large menacing ship with layered armor plates
+    const armor  = '#7f0000';
+    const body   = '#b71c1c';
+    const accent = '#e53935';
+    const core   = '#ff1744';
+    const glow   = '#ff8a80';
+    const cannon = '#4e342e';
+    const eye    = '#ff6d00';
+
+    // Outer armor ring
+    ctx.fillStyle = armor;
+    ctx.fillRect(-20, -20, 40, 6);   // top
+    ctx.fillRect(-20, 14, 40, 6);    // bottom
+    ctx.fillRect(-20, -14, 6, 28);   // left
+    ctx.fillRect(14, -14, 6, 28);    // right
+
+    // Main body
+    ctx.fillStyle = body;
+    ctx.fillRect(-14, -14, 28, 28);
+
+    // Inner accent panels
+    ctx.fillStyle = accent;
+    ctx.fillRect(-10, -10, 8, 8);
+    ctx.fillRect(2, -10, 8, 8);
+    ctx.fillRect(-10, 2, 8, 8);
+    ctx.fillRect(2, 2, 8, 8);
+
+    // Core pulsing element (bright center)
+    ctx.fillStyle = core;
+    ctx.fillRect(-5, -5, 10, 10);
+    ctx.fillStyle = glow;
+    ctx.fillRect(-3, -3, 6, 6);
+
+    // Cannon barrels (top)
+    ctx.fillStyle = cannon;
+    ctx.fillRect(-18, -28, 6, 14);
+    ctx.fillRect(12, -28, 6, 14);
+    ctx.fillRect(-3, -30, 6, 16);
+
+    // Glowing eyes
+    ctx.fillStyle = eye;
+    ctx.fillRect(-12, -7, 5, 4);
+    ctx.fillRect(7, -7, 5, 4);
+
+    // Pulsing outer glow (fades based on HP %)
+    const hpFrac = this.hp / this.maxHp;
+    ctx.globalAlpha = 0.15 + hpFrac * 0.25;
+    ctx.fillStyle = '#ff1744';
+    ctx.fillRect(-22, -22, 44, 44);
+    ctx.globalAlpha = 1;
+  }
 }
 
 // ─── EnemySpawner ─────────────────────────────────────────────────────────────
@@ -537,6 +741,17 @@ export class EnemySpawner {
   /** Accumulator for the next spawn batch. */
   private timer: number = 0;
 
+  /**
+   * Boss spawn countdown.  Counts up to BOSS_SPAWN_INTERVAL every frame.
+   * Public so main.ts can display it as a warning.
+   */
+  bossTimer: number = 0;
+
+  /** Reference to the currently-alive boss, or null if no boss is active. */
+  get activeBoss(): Enemy | null {
+    return this.enemies.find(e => e.isBoss && e.alive) ?? null;
+  }
+
   constructor(
     private canvas: HTMLCanvasElement,
     private camera: Camera,
@@ -547,9 +762,11 @@ export class EnemySpawner {
   /**
    * Seconds between spawns.  Starts at 0.9 s and floors at 0.2 s.
    * Decreasing linearly over time makes early-game calmer.
+   * Adjusted by the difficulty spawn-rate multiplier.
    */
   private spawnInterval(): number {
-    return Math.max(0.2, 0.9 - this.elapsed * 0.007);
+    const base = Math.max(0.2, 0.9 - this.elapsed * 0.007);
+    return base / _diffSpeedMult;
   }
 
   /**
@@ -615,11 +832,25 @@ export class EnemySpawner {
    * Advances elapsed time, fires spawn batches as the timer accumulates, and
    * updates every live enemy.  The while loop handles the edge case where dt
    * is large enough to trigger more than one spawn batch in a single frame.
+   * Also handles boss spawning every BOSS_SPAWN_INTERVAL seconds.
+   *
+   * Returns true if a new boss was spawned this frame (so main.ts can play sfx).
    */
-  update(dt: number, player: Player): void {
+  update(dt: number, player: Player): boolean {
     this.elapsed += dt;
     this.timer += dt;
+    this.bossTimer += dt;
 
+    // ── Boss spawn ──────────────────────────────────────────────────────────
+    let bossSpawned = false;
+    if (this.bossTimer >= BOSS_SPAWN_INTERVAL && this.activeBoss === null) {
+      this.bossTimer = 0;
+      const pos = this.spawnPosition(player);
+      this.enemies.push(new Enemy(pos.x, pos.y, 'boss', this.hpScale()));
+      bossSpawned = true;
+    }
+
+    // ── Regular enemy spawning ──────────────────────────────────────────────
     const interval = this.spawnInterval();
     const scale    = this.hpScale();
     while (this.timer >= interval) {
@@ -635,6 +866,8 @@ export class EnemySpawner {
     for (const e of this.enemies) {
       e.update(dt, player);
     }
+
+    return bossSpawned;
   }
 
   /**

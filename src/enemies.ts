@@ -34,7 +34,21 @@ export class Enemy {
   readonly xpValue: number;
   readonly color: string;
 
-  constructor(x: number, y: number, type: EnemyType = 'grunt') {
+  /** Angle offset (radians) applied to grunt movement to spread them around the player. */
+  private readonly _approachAngleOffset: number;
+  /** Remaining time on the fast enemy's speed burst. */
+  private _burstTimer: number = 0;
+  /** Cooldown before the fast enemy can burst again. */
+  private _burstCooldown: number = 0;
+  /** Remaining time on the tank's charge. */
+  private _chargeTimer: number = 0;
+  /** Cooldown before the tank can charge again. */
+  private _chargeCooldown: number = 4 + Math.random() * 3;
+
+  /**
+   * @param statMult  Difficulty multiplier applied to HP and damage (scales with elapsed time).
+   */
+  constructor(x: number, y: number, type: EnemyType = 'grunt', statMult: number = 1) {
     this.x = x;
     this.y = y;
     this.type = type;
@@ -42,11 +56,15 @@ export class Enemy {
     const stats = ENEMY_TYPES[type];
     this.radius = stats.radius;
     this.speed = stats.speed;
-    this.maxHp = stats.hp;
-    this.hp = stats.hp;
-    this.damage = stats.damage;
+    this.maxHp = Math.round(stats.hp * statMult);
+    this.hp = this.maxHp;
+    this.damage = stats.damage * statMult;
     this.xpValue = stats.xpValue;
     this.color = stats.color;
+
+    // Each grunt gets a small random angle offset so they spiral around the player
+    // rather than all converging on the exact same point.
+    this._approachAngleOffset = type === 'grunt' ? (Math.random() - 0.5) * 0.6 : 0;
   }
 
   takeDamage(amount: number): void {
@@ -68,9 +86,43 @@ export class Enemy {
     const dx = player.x - this.x;
     const dy = player.y - this.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
+
     if (dist > 0) {
-      this.x += (dx / dist) * this.speed * this.slowMultiplier * dt;
-      this.y += (dy / dist) * this.speed * this.slowMultiplier * dt;
+      if (this.type === 'grunt') {
+        // Grunts approach with a slight angular offset so they spread around the player
+        // and flank from different sides instead of stacking on one point.
+        const baseAngle = Math.atan2(dy, dx);
+        const angle = baseAngle + this._approachAngleOffset;
+        this.x += Math.cos(angle) * this.speed * this.slowMultiplier * dt;
+        this.y += Math.sin(angle) * this.speed * this.slowMultiplier * dt;
+      } else if (this.type === 'fast') {
+        // Fast enemies close in normally, then trigger a brief speed burst when
+        // within 300 px to make dodging more challenging.
+        if (this._burstCooldown > 0) this._burstCooldown -= dt;
+        if (this._burstTimer > 0) {
+          this._burstTimer -= dt;
+        } else if (this._burstCooldown <= 0 && dist < 300) {
+          this._burstTimer = 0.25;
+          this._burstCooldown = 2 + Math.random() * 2;
+        }
+        const burstMult = this._burstTimer > 0 ? 2.2 : 1.0;
+        this.x += (dx / dist) * this.speed * burstMult * this.slowMultiplier * dt;
+        this.y += (dy / dist) * this.speed * burstMult * this.slowMultiplier * dt;
+      } else if (this.type === 'tank') {
+        // Tank: slow approach with a periodic charge attack.
+        if (this._chargeCooldown > 0) {
+          this._chargeCooldown -= dt;
+        }
+        if (this._chargeTimer > 0) {
+          this._chargeTimer -= dt;
+        } else if (this._chargeCooldown <= 0 && dist < 400) {
+          this._chargeTimer = 0.5;
+          this._chargeCooldown = 4 + Math.random() * 3;
+        }
+        const chargeMult = this._chargeTimer > 0 ? 3.0 : 1.0;
+        this.x += (dx / dist) * this.speed * chargeMult * this.slowMultiplier * dt;
+        this.y += (dy / dist) * this.speed * chargeMult * this.slowMultiplier * dt;
+      }
     }
 
     if (circlesOverlap(this.x, this.y, this.radius, player.x, player.y, player.radius)) {
@@ -211,6 +263,14 @@ export class EnemySpawner {
     return 'grunt';
   }
 
+  /**
+   * Difficulty multiplier for enemy HP and damage.
+   * Increases by 40% for each completed minute of play.
+   */
+  private statMult(): number {
+    return 1 + Math.floor(this.elapsed / 60) * 0.4;
+  }
+
   private spawnPosition(player: Player): { x: number; y: number } {
     const margin = 80;
     const hw = this.canvas.width / 2 + margin;
@@ -233,9 +293,10 @@ export class EnemySpawner {
     while (this.timer >= interval) {
       this.timer -= interval;
       const count = this.spawnCount();
+      const mult = this.statMult();
       for (let i = 0; i < count; i++) {
         const pos = this.spawnPosition(player);
-        this.enemies.push(new Enemy(pos.x, pos.y, this.pickType()));
+        this.enemies.push(new Enemy(pos.x, pos.y, this.pickType(), mult));
       }
     }
 

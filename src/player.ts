@@ -20,6 +20,13 @@ export class Player {
   /** Accumulated damage multiplier applied to newly unlocked weapons. */
   damageMult: number = 1.0;
 
+  /** Counters for generic upgrade caps. */
+  atkSpeedUpgrades = 0;
+  damageUpgrades = 0;
+  pickupUpgrades = 0;
+  armorUpgrades = 0;
+  hpUpgrades = 0;
+
   facingAngle: number = -Math.PI / 2; // default: facing up
   private _isMoving: boolean = false;
   private _thrusterAge: number = 0;

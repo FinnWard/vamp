@@ -38,6 +38,7 @@ const levelMgr = new LevelUpManager();
 const weapons: AnyWeapon[] = [new MagicBolt()];
 
 function addWeapon(name: string): void {
+  if (weapons.length >= 4) return;
   if (!weapons.some(w => w.name === name)) {
     const w = createWeaponByName(name);
     if (w) {

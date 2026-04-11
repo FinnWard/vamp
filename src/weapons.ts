@@ -396,6 +396,11 @@ export class ThunderStrike implements Weapon {
 
   getStats(): string { return `DMG:${this.damage} ARC+BOLT Rate:${(1 / this.cooldown).toFixed(1)}/s`; }
 
+  upgrade(stat: 'damage' | 'rate'): void {
+    if (stat === 'damage') { this.damage = Math.round(this.damage * 1.3); this.level++; }
+    else if (stat === 'rate') { this.cooldown = Math.max(0.25, this.cooldown * 0.8); this.level++; }
+  }
+
   scaleStats(speedMult: number, damageMult: number): void {
     this.cooldown *= speedMult;
     this.damage = Math.round(this.damage * damageMult);
@@ -510,6 +515,11 @@ export class VoidOrb implements Weapon {
 
   getStats(): string { return `DMG:${this.damage} AoE:x3 Rate:${(1 / this.cooldown).toFixed(1)}/s`; }
 
+  upgrade(stat: 'damage' | 'rate'): void {
+    if (stat === 'damage') { this.damage = Math.round(this.damage * 1.3); this.level++; }
+    else if (stat === 'rate') { this.cooldown = Math.max(1.5, this.cooldown * 0.8); this.level++; }
+  }
+
   scaleStats(speedMult: number, damageMult: number): void {
     this.cooldown *= speedMult;
     this.damage = Math.round(this.damage * damageMult);
@@ -553,6 +563,11 @@ export class Inferno implements Weapon {
   private cameraRef: Camera | null = null;
 
   getStats(): string { return `DMG:${this.damage} Range:${this.auraRange} 6-way orbs`; }
+
+  upgrade(stat: 'damage' | 'range'): void {
+    if (stat === 'damage') { this.damage = Math.round(this.damage * 1.3); this.level++; }
+    else if (stat === 'range') { this.auraRange += 25; this.level++; }
+  }
 
   scaleStats(speedMult: number, damageMult: number): void {
     this.auraCooldown *= speedMult;
@@ -817,6 +832,11 @@ export class SolarFlare implements Weapon {
 
   getStats(): string { return `DMG:${this.damage} ${this.directions}-way pierce Rate:${(1 / this.cooldown).toFixed(1)}/s`; }
 
+  upgrade(stat: 'damage' | 'rate'): void {
+    if (stat === 'damage') { this.damage = Math.round(this.damage * 1.3); this.level++; }
+    else if (stat === 'rate') { this.cooldown = Math.max(0.4, this.cooldown * 0.8); this.level++; }
+  }
+
   scaleStats(speedMult: number, damageMult: number): void {
     this.cooldown *= speedMult; this.damage = Math.round(this.damage * damageMult);
   }
@@ -842,6 +862,11 @@ export class QuantumTorpedo implements Weapon {
   private cameraRef: Camera | null = null;
 
   getStats(): string { return `DMG:${this.damage} Blast:${this.explosionRadius}px homing`; }
+
+  upgrade(stat: 'damage' | 'rate'): void {
+    if (stat === 'damage') { this.damage = Math.round(this.damage * 1.3); this.level++; }
+    else if (stat === 'rate') { this.cooldown = Math.max(1.0, this.cooldown * 0.8); this.level++; }
+  }
 
   scaleStats(speedMult: number, damageMult: number): void {
     this.cooldown *= speedMult; this.damage = Math.round(this.damage * damageMult);
@@ -883,6 +908,11 @@ export class GlacialStorm implements Weapon {
   private pulseEffects: ExplosionEffect[] = [];
 
   getStats(): string { return `DMG:${this.damage} Range:${this.range} Freeze pulse`; }
+
+  upgrade(stat: 'damage' | 'range'): void {
+    if (stat === 'damage') { this.damage = Math.round(this.damage * 1.3); this.level++; }
+    else if (stat === 'range') { this.range += 30; this.level++; }
+  }
 
   scaleStats(speedMult: number, damageMult: number): void {
     this.pulseCooldown *= speedMult; this.tickCooldown *= speedMult;

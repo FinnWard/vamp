@@ -46,6 +46,8 @@ class Projectile {
     private radius: number,   // collision + visual radius
     private pierce: number,   // how many extra enemies the bolt can pass through
     private color: string,    // CSS color string used for glow + body
+    /** Optional callback invoked every time this projectile hits an enemy. */
+    private onHit?: (damage: number) => void,
   ) {}
 
   /**
@@ -78,6 +80,7 @@ class Projectile {
       if (circlesOverlap(this.x, this.y, this.radius, e.x, e.y, e.radius)) {
         this.hitEnemies.add(e);
         e.takeDamage(this.damage);
+        this.onHit?.(this.damage);
         this.pierce--;
         if (this.pierce < 0) {
           this.alive = false;
@@ -142,8 +145,9 @@ export class ProjectilePool {
     radius = 6,
     pierce = 0,
     color = '#ffee58',
+    onHit?: (damage: number) => void,
   ): void {
-    this.projectiles.push(new Projectile(x, y, vx, vy, damage, radius, pierce, color));
+    this.projectiles.push(new Projectile(x, y, vx, vy, damage, radius, pierce, color, onHit));
   }
 
   /**

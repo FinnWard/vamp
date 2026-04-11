@@ -1,17 +1,49 @@
+// ─── enemies.ts ───────────────────────────────────────────────────────────────
+// Defines all enemy types, their base stats, per-type AI behaviour, pixel-art
+// sprites, and the EnemySpawner that creates and manages them.
+//
+// Enemy types
+// ────────────
+//   grunt       — basic homing enemy, balanced stats
+//   fast        — small & quick dart-shaped enemy
+//   tank        — large, slow, high HP boss-like enemy
+//   charger     — patrols slowly then dashes at the player in bursts
+//   ranged      — maintains a preferred distance, strafes at close range
+//   splitter    — on death splits into two splitterlets
+//   splitterlet — small fast child of the splitter
+//
+// HP scaling
+// ───────────
+// Enemy HP scales over time using a combined linear + multiplicative formula
+// so later waves are meaningfully tougher without becoming immediately lethal.
+//
+// Slow mechanic
+// ──────────────
+// Weapons like Cryo Beam set enemy.slowMultiplier < 1.  The multiplier
+// recovers toward 1.0 at a fixed rate each frame (1.5 × dt per second).
+// All movement calculations multiply speed by this value.
+// ──────────────────────────────────────────────────────────────────────────────
+
 import { circlesOverlap, randomRange } from './utils';
 import type { Camera } from './camera';
 import type { Player } from './player';
 
+// ─── Type definitions ─────────────────────────────────────────────────────────
+
+/** String literal union of all possible enemy variants. */
 type EnemyType = 'grunt' | 'fast' | 'tank' | 'charger' | 'ranged' | 'splitter' | 'splitterlet';
 
+/** Base stat block defined once per enemy type. */
 interface EnemyStats {
-  radius: number;
-  speed: number;
-  hp: number;
-  damage: number;
-  xpValue: number;
-  color: string;
+  radius: number;   // collision circle radius (world px)
+  speed: number;    // movement speed (world px/s)
+  hp: number;       // base HP before time-scaling
+  damage: number;   // damage dealt per second of overlap with the player
+  xpValue: number;  // XP gems dropped on death
+  color: string;    // primary CSS color (also used for fallback drawing)
 }
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Hard cap on enemy movement speed (px/s) — keeps fast enemies from being extreme. */
 const MAX_ENEMY_SPEED = 160;
@@ -21,6 +53,12 @@ const HP_SCALE_LINEAR_PER_MIN = 0.25;
 /** HP multiplier applied multiplicatively per minute of real-time elapsed. */
 const HP_SCALE_MULT_PER_MIN = 1.04;
 
+// ─── Base stat table ──────────────────────────────────────────────────────────
+
+/**
+ * Lookup table mapping each EnemyType to its base statistics.
+ * HP is scaled at construction time by the EnemySpawner's hpScale() value.
+ */
 const ENEMY_TYPES: Record<EnemyType, EnemyStats> = {
   grunt:      { radius: 16, speed: 90,  hp: 18, damage: 12, xpValue: 1, color: '#e53935' },
   fast:       { radius: 12, speed: 155, hp: 10, damage: 8,  xpValue: 1, color: '#ff7043' },
@@ -31,42 +69,75 @@ const ENEMY_TYPES: Record<EnemyType, EnemyStats> = {
   splitterlet:{ radius: 9,  speed: 120, hp: 8,  damage: 6,  xpValue: 1, color: '#8bc34a' },
 };
 
+// ─── Enemy ────────────────────────────────────────────────────────────────────
+
 export class Enemy {
+  // World-space position
   x: number;
   y: number;
+
   readonly type: EnemyType;
+
+  /** False once HP reaches 0. EnemySpawner.collectDead() removes dead enemies. */
   alive: boolean = true;
+
   readonly radius: number;
   readonly speed: number;
-  /** Multiplier applied to speed each frame — reset toward 1 over time. Used by cryo weapons. */
+
+  /**
+   * Speed multiplier applied every frame.
+   * Set to < 1 by cryo weapons to slow the enemy.
+   * Recovers toward 1.0 at rate 1.5 per second.
+   */
   slowMultiplier: number = 1.0;
+
   readonly maxHp: number;
   hp: number;
+
+  /** Damage per second applied while the enemy overlaps the player. */
   readonly damage: number;
+
+  /** XP value of gems dropped on death. */
   readonly xpValue: number;
+
+  /** Primary CSS color used in all sprite drawing methods. */
   readonly color: string;
-  /** Cosmetic variant index (0 = default, 1 = alternate shade). */
+
+  /**
+   * Cosmetic sprite variant index (0 = default palette, 1 = alternate palette).
+   * Roughly 30% of enemies spawn with variant 1 so the field isn't monotone.
+   */
   readonly variant: number;
-  /** HP multiplier used at construction — stored so splitter children inherit the same scale. */
+
+  /**
+   * Stores the HP multiplier used at construction so splitter children can
+   * inherit the same scaling as their parent.
+   */
   readonly hpMultiplier: number;
 
   // ── Charger-specific state ────────────────────────────────────────────────
-  private _chargeCooldown: number;   // seconds until next charge
-  private _chargeActive: number = 0; // seconds remaining in active dash
+  /** Seconds until the charger's next dash. */
+  private _chargeCooldown: number;
+  /** Seconds remaining in the current active dash (0 = not charging). */
+  private _chargeActive: number = 0;
+  /** Normalised direction locked at the start of the charge. */
   private _chargeVelX: number = 0;
   private _chargeVelY: number = 0;
 
   // ── Ranged-specific preferred distance ───────────────────────────────────
+  /** The distance (world px) the ranged enemy tries to maintain from the player. */
   private static readonly RANGED_PREF_DIST = 220;
 
   constructor(x: number, y: number, type: EnemyType = 'grunt', hpMultiplier: number = 1) {
     this.x = x;
     this.y = y;
     this.type = type;
-    this.variant = Math.random() < 0.3 ? 1 : 0; // ~30% chance of alternate variant
+    // ~30% chance of alternate visual variant
+    this.variant = Math.random() < 0.3 ? 1 : 0;
 
     const stats = ENEMY_TYPES[type];
     this.radius = stats.radius;
+    // Cap speed at MAX_ENEMY_SPEED at construction too (defense in depth)
     this.speed = Math.min(stats.speed, MAX_ENEMY_SPEED);
     const scaledHp = Math.round(stats.hp * hpMultiplier);
     this.hpMultiplier = hpMultiplier;
@@ -76,10 +147,14 @@ export class Enemy {
     this.xpValue = stats.xpValue;
     this.color = stats.color;
 
-    // Charger: stagger initial charge timing so not all charge at once
+    // Stagger the initial charge timer so a group of chargers doesn't all
+    // dash at exactly the same moment.
     this._chargeCooldown = type === 'charger' ? 1 + Math.random() * 2 : 0;
   }
 
+  // ── Public API ─────────────────────────────────────────────────────────────
+
+  /** Reduces HP; sets alive = false when HP hits zero or below. */
   takeDamage(amount: number): void {
     this.hp -= amount;
     if (this.hp <= 0) {
@@ -88,20 +163,29 @@ export class Enemy {
     }
   }
 
+  /**
+   * Per-frame update.
+   *
+   * Dispatches to the appropriate AI handler based on type, then checks for
+   * player overlap and applies contact damage.  Contact damage is multiplied
+   * by dt so it represents "damage per second" even though it's applied every frame.
+   */
   update(dt: number, player: Player): void {
     if (!this.alive) return;
 
-    // Recover from slow over time
+    // Slow recovery: creep slowMultiplier back toward 1.0 over time
     if (this.slowMultiplier < 1.0) {
       this.slowMultiplier = Math.min(1.0, this.slowMultiplier + dt * 1.5);
     }
 
+    // Direction vector toward the player (normalised)
     const dx = player.x - this.x;
     const dy = player.y - this.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const ndx = dist > 0 ? dx / dist : 0;
     const ndy = dist > 0 ? dy / dist : 0;
 
+    // Dispatch to per-type movement logic
     if (this.type === 'charger') {
       this._updateCharger(dt, ndx, ndy);
     } else if (this.type === 'ranged') {
@@ -113,11 +197,22 @@ export class Enemy {
       this.y += ndy * effectiveSpeed * dt;
     }
 
+    // Contact damage: applied as long as the enemy overlaps the player
     if (circlesOverlap(this.x, this.y, this.radius, player.x, player.y, player.radius)) {
       player.takeDamage(this.damage * dt);
     }
   }
 
+  // ── Per-type AI ────────────────────────────────────────────────────────────
+
+  /**
+   * Charger AI: two-phase behaviour.
+   *   • Patrol phase: move slowly toward player, count down _chargeCooldown.
+   *   • Dash phase:   sprint in the locked direction for 0.5 s, then reset.
+   *
+   * During the dash we intentionally allow the speed to exceed MAX_ENEMY_SPEED
+   * (up to 2× the cap) because that burst is the core threat of this enemy type.
+   */
   private _updateCharger(dt: number, ndx: number, ndy: number): void {
     if (this._chargeActive > 0) {
       // Intentionally exceeds MAX_ENEMY_SPEED during the burst — the whole point of
@@ -137,12 +232,18 @@ export class Enemy {
         // Lock direction toward player and start charge
         this._chargeVelX = ndx;
         this._chargeVelY = ndy;
-        this._chargeActive = 0.5;
-        this._chargeCooldown = 2.5 + Math.random() * 1.5;
+        this._chargeActive = 0.5;                      // dash lasts 0.5 s
+        this._chargeCooldown = 2.5 + Math.random() * 1.5; // 2.5–4 s until next
       }
     }
   }
 
+  /**
+   * Ranged AI: three zones relative to RANGED_PREF_DIST.
+   *   • Too close  (< pref − 30): back away from player.
+   *   • Too far    (> pref + 30): advance toward player.
+   *   • Comfortable (within ±30): strafe perpendicular to the player direction.
+   */
   private _updateRanged(dt: number, dist: number, ndx: number, ndy: number): void {
     const pref = Enemy.RANGED_PREF_DIST;
     let moveMult: number;
@@ -155,18 +256,24 @@ export class Enemy {
     } else {
       // In comfortable range — strafe slightly (use perpendicular)
       moveMult = 0;
-      const perpX = -ndy;
+      const perpX = -ndy; // 90° rotation of the normalised direction
       const perpY = ndx;
       const effectiveSpeed = Math.min(this.speed * 0.4, MAX_ENEMY_SPEED) * this.slowMultiplier;
       this.x += perpX * effectiveSpeed * dt;
       this.y += perpY * effectiveSpeed * dt;
-      return;
+      return; // early out — no forward/backward movement needed
     }
     const effectiveSpeed = Math.min(this.speed, MAX_ENEMY_SPEED) * this.slowMultiplier;
     this.x += ndx * moveMult * effectiveSpeed * dt;
     this.y += ndy * moveMult * effectiveSpeed * dt;
   }
 
+  // ── Rendering ──────────────────────────────────────────────────────────────
+
+  /**
+   * Draws the enemy sprite at its world position then overlays an HP bar.
+   * All sprites are built from fillRect() calls — no image assets needed.
+   */
   draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
     if (!this.alive) return;
     const s = camera.worldToScreen(this.x, this.y);
@@ -174,6 +281,7 @@ export class Enemy {
     ctx.save();
     ctx.translate(s.x, s.y);
 
+    // Dispatch to the correct sprite drawing method
     if (this.type === 'grunt') {
       this._drawGrunt(ctx);
     } else if (this.type === 'fast') {
@@ -190,18 +298,23 @@ export class Enemy {
       this._drawTank(ctx);
     }
 
-    // HP bar
+    // HP bar (drawn in local space, above the sprite)
     const barW = this.radius * 2;
     const barH = 3;
-    const bx = -this.radius;
-    const by = -this.radius - 7;
-    ctx.fillStyle = '#1a1a2e';
+    const bx = -this.radius;             // left edge aligned with collision circle
+    const by = -this.radius - 7;         // above the sprite
+    ctx.fillStyle = '#1a1a2e';           // dark background track
     ctx.fillRect(bx, by, barW, barH);
-    ctx.fillStyle = '#ff1744';
+    ctx.fillStyle = '#ff1744';           // red fill proportional to remaining HP
     ctx.fillRect(bx, by, Math.round(barW * (this.hp / this.maxHp)), barH);
 
     ctx.restore();
   }
+
+  // ── Sprite methods ─────────────────────────────────────────────────────────
+  // All draw in local space (0,0 = centre) using ctx.translate applied by draw().
+  // Two color variants are used to add visual variety; variant 1 has a slightly
+  // different hue chosen from the same family as variant 0.
 
   private _drawGrunt(ctx: CanvasRenderingContext2D): void {
     // Space invader style grunt — variant 1 uses a blue-red palette
@@ -304,6 +417,7 @@ export class Enemy {
     const wing   = this.variant === 1 ? '#ff8f00' : '#ffa000';
     const tip    = this.variant === 1 ? '#fff3e0' : '#ffe0b2';
     const tail   = this.variant === 1 ? '#bf360c' : '#e65100';
+    // Center glow is bright white when actively charging, amber otherwise
     const charge = this._chargeActive > 0 ? '#fff9c4' : '#ff6f00';
     // Wings spread wide
     ctx.fillStyle = wing;
@@ -358,7 +472,7 @@ export class Enemy {
     const main  = this.variant === 1 ? '#33691e' : '#558b2f';
     const light = this.variant === 1 ? '#558b2f' : '#7cb342';
     const dark  = this.variant === 1 ? '#1b5e20' : '#33691e';
-    const crack = '#c8e6c9';
+    const crack = '#c8e6c9'; // light line down the centre hinting at the split
     // Outer body
     ctx.fillStyle = main;
     ctx.fillRect(-11, -11, 22, 22);
@@ -407,10 +521,20 @@ export class Enemy {
   }
 }
 
+// ─── EnemySpawner ─────────────────────────────────────────────────────────────
+// Manages the wave / spawn system.  Each frame it advances an internal timer
+// and spawns batches of enemies when the timer fires.  Both the spawn interval
+// and the batch count tighten over time so the game gets harder as it goes on.
+
 export class EnemySpawner {
+  /** All currently active (alive) enemies plus enemies that died this frame
+   *  (dead ones are removed by collectDead()). */
   enemies: Enemy[] = [];
+
+  /** Total time elapsed since the game started (seconds). */
   elapsed: number = 0;
 
+  /** Accumulator for the next spawn batch. */
   private timer: number = 0;
 
   constructor(
@@ -418,15 +542,29 @@ export class EnemySpawner {
     private camera: Camera,
   ) {}
 
+  // ── Difficulty curves ──────────────────────────────────────────────────────
+
+  /**
+   * Seconds between spawns.  Starts at 0.9 s and floors at 0.2 s.
+   * Decreasing linearly over time makes early-game calmer.
+   */
   private spawnInterval(): number {
     return Math.max(0.2, 0.9 - this.elapsed * 0.007);
   }
 
+  /**
+   * Number of enemies per batch.  Starts at 1 and grows by 1 every 20 seconds.
+   * Together with the tightening interval, this creates escalating pressure.
+   */
   private spawnCount(): number {
     return Math.floor(1 + this.elapsed / 20);
   }
 
-  /** Combined HP multiplier: linear ramp + per-minute multiplicative factor. */
+  /**
+   * Combined HP multiplier used when constructing new enemies.
+   * Blends a linear ramp (steady early-game growth) with a per-minute
+   * multiplicative factor (compounding late-game difficulty).
+   */
   private hpScale(): number {
     const mins = this.elapsed / 60;
     const linear = 1 + mins * HP_SCALE_LINEAR_PER_MIN;
@@ -434,6 +572,11 @@ export class EnemySpawner {
     return linear * mult;
   }
 
+  /**
+   * Picks an enemy type weighted by elapsed time.
+   * Later enemy types unlock at specific time thresholds and have a growing
+   * probability of appearing until they reach their target frequency.
+   */
   private pickType(): EnemyType {
     const roll = Math.random();
     if (this.elapsed > 120 && roll < 0.08) return 'ranged';
@@ -444,6 +587,12 @@ export class EnemySpawner {
     return 'grunt';
   }
 
+  /**
+   * Spawns enemies outside the visible screen area.
+   * Randomly selects one of the four edges (top / bottom / left / right),
+   * then picks a position along that edge so enemies approach from all sides.
+   * A margin of 80 px keeps enemies just off-screen at spawn time.
+   */
   private spawnPosition(player: Player): { x: number; y: number } {
     const margin = 80;
     const hw = this.canvas.width / 2 + margin;
@@ -451,13 +600,22 @@ export class EnemySpawner {
     const side = Math.floor(Math.random() * 4);
     let sx: number;
     let sy: number;
+    // side 0 = top, 1 = bottom, 2 = left, 3 = right
     if (side === 0)      { sx = randomRange(-hw, hw); sy = -hh; }
     else if (side === 1) { sx = randomRange(-hw, hw); sy = hh; }
     else if (side === 2) { sx = -hw; sy = randomRange(-hh, hh); }
     else                 { sx = hw;  sy = randomRange(-hh, hh); }
+    // Offset is in screen space; convert to world space by adding camera (player) position
     return { x: player.x + sx, y: player.y + sy };
   }
 
+  // ── Per-frame logic ────────────────────────────────────────────────────────
+
+  /**
+   * Advances elapsed time, fires spawn batches as the timer accumulates, and
+   * updates every live enemy.  The while loop handles the edge case where dt
+   * is large enough to trigger more than one spawn batch in a single frame.
+   */
   update(dt: number, player: Player): void {
     this.elapsed += dt;
     this.timer += dt;
@@ -473,13 +631,20 @@ export class EnemySpawner {
       }
     }
 
+    // Update all enemies (alive or freshly-dead this frame)
     for (const e of this.enemies) {
       e.update(dt, player);
     }
   }
 
-  /** Returns enemies killed this frame and removes them from the active list.
-   *  Splitter enemies spawn splitterlets near their death position. */
+  /**
+   * Returns enemies killed this frame and removes them from the active list.
+   * Splitter enemies spawn two splitterlets near their death position before
+   * being returned; the splitterlets are added back to `enemies` so they
+   * participate in the next update cycle.
+   *
+   * Called by main.ts after update() so kills can be counted and gems spawned.
+   */
   collectDead(): Enemy[] {
     const dead = this.enemies.filter(e => !e.alive);
     this.enemies = this.enemies.filter(e => e.alive);
@@ -497,6 +662,7 @@ export class EnemySpawner {
     return dead;
   }
 
+  /** Draws every enemy (alive or freshly-dead this frame). */
   draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
     for (const e of this.enemies) {
       e.draw(ctx, camera);

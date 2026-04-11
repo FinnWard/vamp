@@ -1,40 +1,118 @@
+// ─── levelup.ts ───────────────────────────────────────────────────────────────
+// Manages the XP → level-up progression and the pool of available upgrades.
+//
+// How levelling works
+// ────────────────────
+// 1. The player collects gems, each worth some XP.
+// 2. main.ts passes the total XP gained each frame to LevelUpManager.addXp().
+// 3. When accumulated XP exceeds the threshold for the next level the manager
+//    fires the onLevelUp callback with up to 3 randomly-selected upgrades from
+//    the UPGRADE_POOL that are currently available (pass their `requires` check).
+// 4. main.ts pauses gameplay and shows the upgrade cards.  When the player
+//    picks a card, main.ts calls the upgrade's `apply` function and resumes.
+//
+// Upgrade pool design
+// ────────────────────
+// Every upgrade in UPGRADE_POOL has:
+//   id       — stable string identifier (used for debugging).
+//   label    — display name shown on the upgrade card.
+//   desc     — short description text shown below the name.
+//   requires — predicate checked before offering the upgrade (prevents offering
+//              weapons the player already has, enforces level caps, etc.).
+//   apply    — mutates the game state when the upgrade is chosen.
+//
+// Upgrade categories:
+//   • Weapon-specific upgrades (damage, rate, range, etc.)
+//   • New weapon unlocks
+//   • Evolution upgrades (two weapons must be at required levels)
+//   • Generic player powerups (speed, HP, armor, pickup radius, etc.)
+//
+// Caps
+// ─────
+// Base weapons cap at MAX_BASE_WEAPON_LEVEL (5) so the upgrade pool doesn't
+// offer the same weapon infinitely.  Evolution weapons cap at MAX_EVO_WEAPON_LEVEL
+// (3).  Generic powerups each have their own cap via player.xxxUpgrades counter.
+// ──────────────────────────────────────────────────────────────────────────────
+
 import { shuffle } from './utils';
 import type { AnyWeapon } from './weapons';
 import type { Player } from './player';
 
-// XP required per level — tuned for ~5 minute runs
+// ─── XP thresholds ────────────────────────────────────────────────────────────
+
+// XP required per level — tuned for ~5 minute runs.
+// Indices 1-9 are hand-tuned early levels; beyond index 9 a formula generates
+// thresholds that grow by 75 XP per level to keep mid/late-game pacing smooth.
 const XP_THRESHOLDS = [0, 2, 4, 8, 13, 19, 27, 36, 47, 60] as const;
 
 // ─── Upgrade caps ─────────────────────────────────────────────────────────────
+// Caps prevent any single upgrade path from being taken infinitely.
 const MAX_BASE_WEAPON_LEVEL = 5;   // base weapons: up to 4 upgrades (lv1 → lv5)
 const MAX_EVO_WEAPON_LEVEL  = 3;   // evolved weapons: up to 2 upgrades (lv1 → lv3)
 const MAX_WEAPON_SLOTS      = 4;   // player can hold at most 4 weapons at once
 const MAX_GENERIC_UPGRADES  = 5;   // each generic powerup can stack at most 5 times
 
+/**
+ * Returns the XP required to reach the given level.
+ * For levels within the hand-tuned table, returns the table value directly.
+ * For levels beyond the table, continues with a +75 XP / level formula.
+ */
 function xpForLevel(level: number): number {
   if (level < XP_THRESHOLDS.length) return XP_THRESHOLDS[level] ?? 0;
   return (XP_THRESHOLDS[XP_THRESHOLDS.length - 1] ?? 0) + (level - XP_THRESHOLDS.length + 1) * 75;
 }
 
+// ─── Callback type aliases ─────────────────────────────────────────────────────
+
+/** Called when the player unlocks a new weapon by name. */
 type AddWeaponFn = (name: string) => void;
+/** Called when a weapon is consumed by an evolution upgrade. */
 type RemoveWeaponFn = (name: string) => void;
 
+// ─── Upgrade interface ─────────────────────────────────────────────────────────
+
+/**
+ * A single entry in the upgrade pool.  Each level-up the manager samples
+ * up to 3 available entries from this pool and presents them to the player.
+ */
 export interface Upgrade {
+  /** Unique string identifier for debugging. */
   id: string;
+  /** Short display name shown on the upgrade card header. */
   label: string;
+  /** One-line description of the effect shown below the label. */
   desc: string;
+  /**
+   * Mutates game state to apply the upgrade.
+   * Called once when the player selects this card.
+   */
   apply(weapons: AnyWeapon[], addWeapon: AddWeaponFn, player: Player, removeWeapon: RemoveWeaponFn): void;
+  /**
+   * Returns true if the upgrade should be included in the current offer pool.
+   * Prevents duplicates, enforces caps, and gates evolution upgrades on
+   * prerequisite weapon levels.
+   */
   requires(weapons: AnyWeapon[], player: Player): boolean;
 }
 
+/** Passed to main.ts's onLevelUp callback so it can call the chosen upgrade. */
 export type ApplyUpgradeFn = (choice: Upgrade) => void;
+/** Signature of the callback registered by main.ts to receive level-up events. */
 export type LevelUpCallback = (choices: Upgrade[], apply: ApplyUpgradeFn) => void;
 
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Finds the named weapon in the array and calls its upgrade() method.
+ * Uses a type cast because different weapon classes accept different stat keys;
+ * callers are responsible for passing a valid stat name.
+ */
 function upgradeWeapon(weapons: AnyWeapon[], name: string, stat: string): void {
   const w = weapons.find(w => w.name === name);
   if (w && 'upgrade' in w) (w as { upgrade(s: string): void }).upgrade(stat);
 }
 
+/** Returns the current level of the named weapon, or 0 if not equipped. */
 function weaponLevel(weapons: AnyWeapon[], name: string): number {
   return weapons.find(w => w.name === name)?.level ?? 0;
 }
@@ -363,15 +441,38 @@ const UPGRADE_POOL: Upgrade[] = [
 ];
 
 export class LevelUpManager {
+  /** Current player level (starts at 1). */
   level = 1;
+
+  /** Accumulated XP within the current level (resets on level-up). */
   xp = 0;
+
+  /** XP needed to reach the next level. Recalculated after each level-up. */
   xpToNext: number;
+
+  /**
+   * Callback set by main.ts.  Called whenever the player levels up with the
+   * list of available upgrade choices and a function to apply the chosen one.
+   * Set to null initially; main.ts assigns it immediately after constructing this manager.
+   */
   onLevelUp: LevelUpCallback | null = null;
 
   constructor() {
+    // XP needed to reach level 2 (the first real level-up)
     this.xpToNext = xpForLevel(1);
   }
 
+  /**
+   * Adds XP to the current total and triggers level-ups until the XP is
+   * consumed.  The while loop handles the (rare) case where a single large
+   * gem grant causes more than one level-up in a single frame.
+   *
+   * @param amount      XP gained this frame (usually the value of one gem).
+   * @param weapons     Current weapon array — passed to upgrade `apply` / `requires`.
+   * @param addWeapon   Callback to equip a new weapon by name.
+   * @param player      Player reference for stat upgrades.
+   * @param removeWeapon Callback to remove a weapon (used by evolution upgrades).
+   */
   addXp(amount: number, weapons: AnyWeapon[], addWeapon: AddWeaponFn, player: Player, removeWeapon: RemoveWeaponFn): void {
     if (amount <= 0) return;
     this.xp += amount;
@@ -383,6 +484,11 @@ export class LevelUpManager {
     }
   }
 
+  /**
+   * Filters the UPGRADE_POOL to currently available upgrades, shuffles them,
+   * takes 3 (or fewer if not enough are available), and fires the onLevelUp
+   * callback so main.ts can display the upgrade cards.
+   */
   private triggerLevelUp(weapons: AnyWeapon[], addWeapon: AddWeaponFn, player: Player, removeWeapon: RemoveWeaponFn): void {
     const available = UPGRADE_POOL.filter(u => u.requires(weapons, player));
     const choices = shuffle([...available]).slice(0, 3);
@@ -393,6 +499,10 @@ export class LevelUpManager {
     }
   }
 
+  /**
+   * Returns how full the XP bar is as a 0–1 fraction.
+   * Capped at 1 to avoid visual overflow if rounding causes xp > xpToNext.
+   */
   get xpFraction(): number {
     return this.xpToNext > 0 ? Math.min(this.xp / this.xpToNext, 1) : 1;
   }

@@ -1,104 +1,179 @@
+// ─── gems.ts ──────────────────────────────────────────────────────────────────
+// XP gems are dropped by enemies when they die.  The player collects them by
+// moving within range, gaining experience points that feed the level-up system.
+//
+// Key mechanics
+// ──────────────
+// • Pull radius — gems start flying toward the player when within this radius.
+//   The player can expand it via "Tractor Beam" upgrades.
+// • Collect radius — once a gem is this close it is immediately collected.
+// • Gem compaction — when there are many gems on screen, nearby gems
+//   periodically merge to keep the count manageable.  Merged gems sum their XP
+//   values and adopt a weighted-average position.
+//
+// Visual design
+// ──────────────
+// Gems are diamond shapes (path with 4 points) drawn without image assets.
+// Color and size scale with XP value so rare/merged gems look more impressive.
+// Gems bob up and down using a per-gem sin oscillation to give life to the field.
+// ──────────────────────────────────────────────────────────────────────────────
+
 import { randomRange } from './utils';
 import type { Camera } from './camera';
 import type { Player } from './player';
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/** Gems begin homing toward the player when within this many world-px. */
 const PULL_RADIUS = 60;
-const PULL_RADIUS_SQ = PULL_RADIUS * PULL_RADIUS;
+const PULL_RADIUS_SQ = PULL_RADIUS * PULL_RADIUS; // squared to avoid sqrt in hot-path
+
+/** Gems are collected (disappear and grant XP) once this close. */
 const COLLECT_RADIUS = 30;
 const COLLECT_RADIUS_SQ = COLLECT_RADIUS * COLLECT_RADIUS;
 
 /** Gem compaction kicks in above this count (runs every COMPACT_INTERVAL s). */
 const COMPACT_THRESHOLD = 80;
 const COMPACT_INTERVAL = 0.4;
-/** Gems within this distance of each other can merge. */
+
+/** Two gems can merge if their centres are within this squared distance. */
 const MERGE_DIST_SQ = 55 * 55;
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Returns a CSS hex color representing the gem's XP tier.
+ * More valuable gems (from high-XP enemies or post-merge) glow warmer colors.
+ */
 function gemColor(value: number): string {
-  if (value >= 25) return '#ffd740'; // gold
-  if (value >= 10) return '#e040fb'; // bright magenta
-  if (value >= 5)  return '#40c4ff'; // sky blue
-  if (value >= 2)  return '#00e5ff'; // cyan
-  return '#69ffdf';                  // teal-mint
+  if (value >= 25) return '#ffd740'; // gold   — boss / heavily merged
+  if (value >= 10) return '#e040fb'; // magenta — splitter / multi-merge
+  if (value >= 5)  return '#40c4ff'; // sky blue — tank / large
+  if (value >= 2)  return '#00e5ff'; // cyan — medium
+  return '#69ffdf';                  // teal-mint — basic grunt
 }
 
+/**
+ * Returns a visual radius (px) that grows with XP value.
+ * Capped at 26 px so even huge merged gems don't cover the screen.
+ */
 function gemRadius(value: number): number {
   return Math.min(6 + Math.sqrt(value) * 3.5, 26);
 }
 
+// ─── Gem ──────────────────────────────────────────────────────────────────────
+
 export class Gem {
+  /** False once the gem has been collected or merged into another gem. */
   alive = true;
+
+  /** Visual and collision radius, derived from value. */
   radius: number;
+
+  /** CSS color string, derived from value. */
   color: string;
+
+  /**
+   * Per-gem phase offset for the bob animation so all gems don't move in sync.
+   * Randomised at construction (0–2π).
+   */
   private age: number;
 
   constructor(
     public x: number,
     public y: number,
+    /** XP value granted when the gem is collected. */
     public value: number = 1,
   ) {
     this.radius = gemRadius(value);
     this.color = gemColor(value);
-    this.age = randomRange(0, Math.PI * 2);
+    this.age = randomRange(0, Math.PI * 2); // random start phase
   }
 
+  /**
+   * Merges another gem into this one.
+   * The resulting gem sits at the weighted-average position of both gems and
+   * has their combined XP.  The absorbed gem should be marked dead by the caller.
+   */
   absorb(other: Gem): void {
     // Weighted-average position, then update appearance
     const total = this.value + other.value;
     this.x = (this.x * this.value + other.x * other.value) / total;
     this.y = (this.y * this.value + other.y * other.value) / total;
     this.value = total;
+    // Recalculate visual properties now that value has increased
     this.radius = gemRadius(this.value);
     this.color = gemColor(this.value);
   }
 
+  /**
+   * Per-frame update: advances the bob animation and handles player attraction.
+   *
+   * Pull logic:
+   *   1. If within COLLECT_RADIUS → mark dead (collected this frame).
+   *   2. Else if within pull radius → fly toward player at a fixed speed.
+   *   3. Otherwise → stay still.
+   *
+   * The effective pull radius uses the larger of the base constant and the
+   * player's (possibly upgraded) pickupRadius.
+   */
   update(dt: number, player: Player): void {
-    this.age += dt * 2;
+    this.age += dt * 2; // bob oscillation speed
 
     const dx = player.x - this.x;
     const dy = player.y - this.y;
     const distSq = dx * dx + dy * dy;
 
+    // Close enough to collect
     if (distSq < COLLECT_RADIUS_SQ) {
       this.alive = false;
       return;
     }
 
+    // Fly toward player if within the pull zone (respects pickup radius upgrades)
     const pullRadiusSq = Math.max(PULL_RADIUS_SQ, player.pickupRadius * player.pickupRadius);
     if (distSq < pullRadiusSq) {
       const dist = Math.sqrt(distSq);
-      const speed = 200;
+      const speed = 200; // world px/s
       this.x += (dx / dist) * speed * dt;
       this.y += (dy / dist) * speed * dt;
     }
   }
 
+  /**
+   * Draws the gem as a diamond (rotated square) with an optional glow and
+   * a small triangular highlight in the top-left to simulate a gem facet.
+   * Gems that are off-screen are skipped to avoid unnecessary draw calls.
+   */
   draw(ctx: CanvasRenderingContext2D, camera: Camera, cw: number, ch: number): void {
     const s = camera.worldToScreen(this.x, this.y);
     const r = this.radius;
 
-    // Cull off-screen gems
+    // Frustum cull: skip if the gem's bounding box is entirely off-screen
     if (s.x < -r || s.x > cw + r || s.y < -r || s.y > ch + r) return;
 
+    // Vertical bob: oscillates ±2 px using the per-gem age offset
     const bob = Math.sin(this.age) * 2;
 
     ctx.save();
     ctx.fillStyle = this.color;
 
-    // Only pay shadowBlur cost for larger/valuable gems
+    // Shadow blur is expensive — only pay for it on valuable gems
     if (this.value >= 5) {
       ctx.shadowColor = this.color;
       ctx.shadowBlur = 12;
     }
 
+    // Diamond shape: top → right → bottom → left
     ctx.beginPath();
-    ctx.moveTo(s.x,           s.y - r + bob);
-    ctx.lineTo(s.x + r * 0.7, s.y + bob);
-    ctx.lineTo(s.x,           s.y + r * 0.7 + bob);
-    ctx.lineTo(s.x - r * 0.7, s.y + bob);
+    ctx.moveTo(s.x,           s.y - r + bob);       // top point
+    ctx.lineTo(s.x + r * 0.7, s.y + bob);           // right point
+    ctx.lineTo(s.x,           s.y + r * 0.7 + bob); // bottom point
+    ctx.lineTo(s.x - r * 0.7, s.y + bob);           // left point
     ctx.closePath();
     ctx.fill();
 
-    // Inner highlight — only for medium+ gems (skip for tiny ones)
+    // Small triangular highlight in the upper-left facet (skipped for tiny gems)
     if (this.value >= 2) {
       ctx.shadowBlur = 0;
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
@@ -114,10 +189,20 @@ export class Gem {
   }
 }
 
+// ─── GemManager ───────────────────────────────────────────────────────────────
+// Owns the full list of live gems and drives their lifecycle.
+
 export class GemManager {
   gems: Gem[] = [];
+
+  /** Accumulates time between compaction passes. */
   private compactTimer = 0;
 
+  /**
+   * Spawns a gem at a slightly randomised offset from the enemy's death position.
+   * The offset prevents all gems from stacking at exactly the same point,
+   * which would look odd and make the compaction logic too aggressive.
+   */
   spawnFromEnemy(enemy: { x: number; y: number; xpValue: number }): void {
     // Scatter offset so gems don't stack exactly on enemy
     const ox = randomRange(-12, 12);
@@ -125,7 +210,15 @@ export class GemManager {
     this.gems.push(new Gem(enemy.x + ox, enemy.y + oy, enemy.xpValue));
   }
 
-  /** Merge gems that are spatially close. O(n²) but runs infrequently. */
+  /**
+   * Merges spatially close gems to keep the total count manageable.
+   * O(n²) — only runs when gem count exceeds COMPACT_THRESHOLD and
+   * at most once every COMPACT_INTERVAL seconds.
+   *
+   * Algorithm: for each live gem A, check all gems B after it in the array.
+   * If they're close enough, absorb B into A and mark B dead.
+   * Dead gems are then filtered out in one pass at the end.
+   */
   private compact(): void {
     const gems = this.gems;
     for (let i = 0; i < gems.length; i++) {
@@ -144,8 +237,17 @@ export class GemManager {
     this.gems = gems.filter(g => g.alive);
   }
 
-  /** Updates all gems and returns total XP collected this frame. */
+  /**
+   * Per-frame update for all gems.
+   *
+   * Returns the total XP collected this frame so main.ts can pass it to the
+   * level-up manager.  Collected gems (alive = false after their update) are
+   * summed and then removed from the array.
+   *
+   * Also triggers compaction when the gem count is high.
+   */
   update(dt: number, player: Player): number {
+    // Rate-limit compaction so it doesn't run every frame
     this.compactTimer += dt;
     if (this.gems.length > COMPACT_THRESHOLD && this.compactTimer >= COMPACT_INTERVAL) {
       this.compactTimer = 0;
@@ -156,12 +258,15 @@ export class GemManager {
     for (const g of this.gems) {
       if (!g.alive) continue;
       g.update(dt, player);
+      // If the gem was collected inside update(), sum its value
       if (!g.alive) xpGained += g.value;
     }
+    // Remove all dead gems (collected or merged) from the live list
     this.gems = this.gems.filter(g => g.alive);
     return xpGained;
   }
 
+  /** Draws all live gems to the canvas. */
   draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
     const cw = ctx.canvas.width;
     const ch = ctx.canvas.height;

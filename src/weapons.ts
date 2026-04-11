@@ -1,3 +1,48 @@
+// ─── weapons.ts ───────────────────────────────────────────────────────────────
+// All weapon classes and their supporting helper classes/effects.
+//
+// Architecture
+// ─────────────
+// Every weapon implements the `Weapon` interface, which requires:
+//   • name / isEvolution / level  — identity
+//   • getStats()                  — short stat string shown in the pause screen
+//   • update(dt, player, enemies, pool) — per-frame logic; fire if cooldown reached
+//   • draw?(ctx, camera, player)  — optional per-frame visual (arc/beam/orb)
+//   • scaleStats(speedMult, damageMult) — apply global multipliers
+//
+// Weapons are stored in main.ts's `weapons` array and updated/drawn each frame
+// by simple for-loops; no type-specific dispatch is needed because the interface
+// is uniform.
+//
+// Base weapons (8)
+// ─────────────────
+//   Laser (MagicBolt)        — fast single-target bolt, pierce upgrades
+//   Plasma Whip (Whip)       — melee arc sweep, facing nearest enemy
+//   Plasma Bomb (Fireball)   — slow homing orb that explodes
+//   Ion Chain (Lightning)    — chain-zap hitting multiple nearest enemies
+//   Force Field (Aura)       — pulsing damage ring around the player
+//   Missile Barrage          — homing explosive missiles, salvo of N
+//   Pulse Cannon             — N-directional simultaneous burst fire
+//   Cryo Beam                — continuous ray to nearest enemy, slows them
+//
+// Evolution weapons (6) — unlocked by merging two base weapons at required levels
+// ──────────────────────────────────────────────────────────────────────────────
+//   Beam Lash      = Laser lv3 + Plasma Whip lv2  → arc + piercing bolt
+//   Dark Matter    = Laser lv3 + Plasma Bomb lv2  → slow singularity + big explosion
+//   Nova Burst     = Force Field lv2 + Plasma Bomb lv3 → field + 6-way orbs
+//   Solar Flare    = Laser lv2 + Pulse Cannon lv2 → 8-way piercing solar bolts
+//   Quantum Torpedo= Missile Barrage lv2 + Plasma Bomb lv2 → giant homing bomb
+//   Glacial Storm  = Cryo Beam lv2 + Force Field lv2 → freeze field + cryo pulses
+//
+// Visual helpers (private to this module)
+// ─────────────────────────────────────────
+//   ExplosionEffect   — expanding ring that fades out
+//   LightningFlash    — short-lived dashed line segments between entities
+//   FireOrb           — shared homing orb used by Plasma Bomb and Nova Burst
+//   VoidOrbProjectile — long-lived orb used by Dark Matter
+//   HomingMissile     — steered missile used by Missile Barrage and Quantum Torpedo
+// ──────────────────────────────────────────────────────────────────────────────
+
 import { circlesOverlap } from './utils';
 import type { Camera } from './camera';
 import type { Player } from './player';
@@ -6,18 +51,28 @@ import type { ProjectilePool } from './projectiles';
 
 // ─── Shared interface ─────────────────────────────────────────────────────────
 
+/**
+ * Every weapon in the game implements this interface.
+ * main.ts stores all active weapons as `AnyWeapon[]` (alias for Weapon[]) and
+ * calls update/draw without knowing the concrete type.
+ */
 export interface Weapon {
   readonly name: string;
   readonly isEvolution: boolean;
   level: number;
+  /** Returns a short stat summary shown in the pause screen weapon card. */
   getStats(): string;
+  /** Per-frame logic — fires projectiles, applies AoE, etc. */
   update(dt: number, player: Player, enemies: Enemy[], pool: ProjectilePool): void;
+  /** Optional per-frame draw (visual effects that aren't projectiles). */
   draw?(ctx: CanvasRenderingContext2D, camera: Camera, player: Player): void;
   /** Scale cooldown by speedMult and damage by damageMult (for global powerups). */
   scaleStats(speedMult: number, damageMult: number): void;
 }
 
 // ─── Visual: explosion ring effect ───────────────────────────────────────────
+// A single expanding ring used to visualise weapon explosions and aura pulses.
+// The ring fades out over `duration` seconds as it expands to `maxRadius`.
 
 class ExplosionEffect {
   private age = 0;
@@ -34,7 +89,7 @@ class ExplosionEffect {
   }
   draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
     if (this.done) return;
-    const t = this.age / this.duration;
+    const t = this.age / this.duration; // 0 → 1 over the lifetime
     const s = camera.worldToScreen(this.x, this.y);
     ctx.save();
     ctx.strokeStyle = this.color; ctx.shadowColor = this.color; ctx.shadowBlur = 12;
@@ -45,12 +100,14 @@ class ExplosionEffect {
 }
 
 // ─── Visual: lightning flash ──────────────────────────────────────────────────
+// Short-lived dashed line segments drawn between connected entities (player →
+// enemy chain for Ion Chain, player → targets for Beam Lash).
 
 interface LightningSegment { x1: number; y1: number; x2: number; y2: number }
 
 class LightningFlash {
   private age = 0; done = false;
-  private readonly duration = 0.12;
+  private readonly duration = 0.12; // very brief: 120 ms
   constructor(readonly segments: LightningSegment[]) {}
   update(dt: number): void { this.age += dt; if (this.age >= this.duration) this.done = true; }
   draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
@@ -69,6 +126,8 @@ class LightningFlash {
 }
 
 // ─── Weapon: Laser ───────────────────────────────────────────────────────────
+// Fires a fast piercing bolt at the nearest enemy.  The starting weapon —
+// every new game begins with a level-1 Laser already equipped.
 export class MagicBolt implements Weapon {
   readonly name = 'Laser';
   readonly isEvolution = false;
@@ -958,9 +1017,17 @@ export class GlacialStorm implements Weapon {
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
+// createWeaponByName() is the single place that maps string weapon names to
+// concrete class instances.  It is called by main.ts's addWeapon() helper
+// (which also applies accumulated speed/damage multipliers so a newly-unlocked
+// weapon starts pre-scaled to match current global powerup levels).
 
 export type AnyWeapon = Weapon;
 
+/**
+ * Constructs and returns a new weapon instance for the given display name, or
+ * null if the name is unrecognised (shouldn't happen in practice).
+ */
 export function createWeaponByName(name: string): AnyWeapon | null {
   switch (name) {
     case 'Laser':           return new MagicBolt();

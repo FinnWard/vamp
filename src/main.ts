@@ -40,7 +40,7 @@ import { ProjectilePool } from './projectiles';
 import { GemManager } from './gems';
 import { MagicBolt, createWeaponByName, type AnyWeapon, type Weapon } from './weapons';
 import { LevelUpManager, type Upgrade, type ApplyUpgradeFn } from './levelup';
-import { HUD } from './hud';
+import { HUD, drawSpriteToCanvas } from './hud';
 import { AudioManager } from './audio';
 import { DamageNumberPool } from './damage-numbers';
 
@@ -175,6 +175,7 @@ const restartBtn        = document.getElementById('restartBtn')!;
 const pauseOverlay      = document.getElementById('pauseOverlay')!;
 const pauseStats        = document.getElementById('pauseStats')!;
 const pauseWeapons      = document.getElementById('pauseWeapons')!;
+const pausePowerups     = document.getElementById('pausePowerups')!;
 const resumeBtn         = document.getElementById('resumeBtn')!;
 const menuBtn           = document.getElementById('menuBtn')!;
 const muteBtn           = document.getElementById('muteBtn')!;
@@ -228,7 +229,27 @@ function showLevelUpUI(choices: Upgrade[], applyFn: ApplyUpgradeFn): void {
   for (const choice of choices) {
     const card = document.createElement('button');
     card.className = 'upgrade-card';
-    card.innerHTML = `<span class="card-label">${choice.label}</span><span class="card-desc">${choice.desc}</span>`;
+
+    // Sprite canvas (shown when an icon key is defined)
+    if (choice.icon) {
+      const spriteCanvas = document.createElement('canvas');
+      spriteCanvas.width  = 24;
+      spriteCanvas.height = 24;
+      spriteCanvas.className = 'card-sprite';
+      drawSpriteToCanvas(spriteCanvas, choice.icon);
+      card.appendChild(spriteCanvas);
+    }
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'card-label';
+    labelEl.textContent = choice.label;
+    card.appendChild(labelEl);
+
+    const descEl = document.createElement('span');
+    descEl.className = 'card-desc';
+    descEl.textContent = choice.desc;
+    card.appendChild(descEl);
+
     card.addEventListener('click', () => {
       applyFn(choice);
       hideLevelUpUI();
@@ -316,6 +337,47 @@ function showPause(): void {
       <div class="pause-weapon-stats">${w.getStats()}</div>
     `;
     pauseWeapons.appendChild(card);
+  }
+
+  // ── Powerup tracking ──────────────────────────────────────────────────────
+  pausePowerups.innerHTML = '';
+  const powerupDefs: { key: string; label: string; count: number }[] = [
+    { key: 'atk_speed',    label: 'SYS OVERCLOCK',  count: player.atkSpeedUpgrades  },
+    { key: 'damage_amp',   label: 'WEAPONS AMP',     count: player.damageUpgrades    },
+    { key: 'shield_cap',   label: 'SHIELD CAP',      count: player.hpUpgrades        },
+    { key: 'armor',        label: 'TI PLATING',      count: player.armorUpgrades     },
+    { key: 'tractor_beam', label: 'TRACTOR BEAM',    count: player.pickupUpgrades    },
+    { key: 'burn',         label: 'BURN CATALYST',   count: player.burnUpgrades      },
+    { key: 'poison',       label: 'TOXIN CORE',      count: player.poisonUpgrades    },
+  ];
+  const activePowerups = powerupDefs.filter(p => p.count > 0);
+  if (activePowerups.length > 0) {
+    const heading = document.createElement('div');
+    heading.className = 'pause-powerups-heading';
+    heading.textContent = 'POWERUPS';
+    pausePowerups.appendChild(heading);
+    const grid = document.createElement('div');
+    grid.className = 'pause-powerups-grid';
+    for (const p of activePowerups) {
+      const item = document.createElement('div');
+      item.className = 'pause-powerup-item';
+      const spriteCanvas = document.createElement('canvas');
+      spriteCanvas.width  = 24;
+      spriteCanvas.height = 24;
+      spriteCanvas.className = 'pause-powerup-sprite';
+      drawSpriteToCanvas(spriteCanvas, p.key);
+      const nameEl = document.createElement('div');
+      nameEl.className = 'pause-powerup-name';
+      nameEl.textContent = p.label;
+      const stackEl = document.createElement('div');
+      stackEl.className = 'pause-powerup-stacks';
+      stackEl.textContent = `×${p.count}`;
+      item.appendChild(spriteCanvas);
+      item.appendChild(nameEl);
+      item.appendChild(stackEl);
+      grid.appendChild(item);
+    }
+    pausePowerups.appendChild(grid);
   }
 
   pauseOverlay.classList.remove('hidden');

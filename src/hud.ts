@@ -211,6 +211,157 @@ const WEAPON_SPRITE_COLORS: Record<string, [string, string]> = {
   'Glacial Storm':   ['#b3e5fc', '#e1f5fe'],
 };
 
+// ─── Pixel sprite definitions for generic powerups (8×8 grid) ─────────────────
+// Keys match the `icon` field on generic Upgrade entries in levelup.ts.
+
+export const POWERUP_SPRITE_GRIDS: Record<string, string[]> = {
+  // ⚡ Systems Overclock — lightning bolt
+  'atk_speed': [
+    '.111111.',
+    '.....11.',
+    '....11..',
+    '...11...',
+    '..1111..',
+    '.11.....',
+    '11......',
+    '........',
+  ],
+  // 💥 Weapons Amplifier — starburst explosion
+  'damage_amp': [
+    '...11...',
+    '.1.11.1.',
+    '..1111..',
+    '11111111',
+    '11111111',
+    '..1111..',
+    '.1.11.1.',
+    '...11...',
+  ],
+  // 🧲 Tractor Beam — U-shaped magnet
+  'tractor_beam': [
+    '11....11',
+    '11....11',
+    '11....11',
+    '11....11',
+    '.111111.',
+    '..1221..',
+    '..1111..',
+    '........',
+  ],
+  // 🛡 Titanium Plating — shield silhouette
+  'armor': [
+    '.111111.',
+    '11111111',
+    '11111111',
+    '11111111',
+    '.111111.',
+    '..1111..',
+    '...11...',
+    '........',
+  ],
+  // 🔧 Emergency Repair — medical cross
+  'repair': [
+    '...11...',
+    '...11...',
+    '11111111',
+    '11111111',
+    '...11...',
+    '...11...',
+    '...11...',
+    '........',
+  ],
+  // 🔥 Burn Catalyst — flame
+  'burn': [
+    '...1....',
+    '..111...',
+    '.11111..',
+    '1111111.',
+    '11.1111.',
+    '.11111..',
+    '..111...',
+    '...1....',
+  ],
+  // ☠ Toxin Core — skull
+  'poison': [
+    '.111111.',
+    '1.1..1.1',
+    '1.1111.1',
+    '11111111',
+    '.111111.',
+    '.11..11.',
+    '.111111.',
+    '........',
+  ],
+  // 🔋 Shield Capacity — battery icon
+  'shield_cap': [
+    '..1111..',
+    '.111111.',
+    '11111111',
+    '1.1111.1',
+    '1.1111.1',
+    '11111111',
+    '.111111.',
+    '........',
+  ],
+  // 🚀 Thruster Up — rightward arrow
+  'speed': [
+    '....1...',
+    '...11...',
+    '..111...',
+    '11111111',
+    '11111111',
+    '..111...',
+    '...11...',
+    '....1...',
+  ],
+};
+
+/** Maps each powerup icon key to [primaryColor, secondaryColor]. */
+export const POWERUP_SPRITE_COLORS: Record<string, [string, string]> = {
+  'atk_speed':    ['#ffd740', '#fff9c4'],
+  'damage_amp':   ['#ff6d00', '#ffab40'],
+  'tractor_beam': ['#00e5ff', '#b2ebf2'],
+  'armor':        ['#90a4ae', '#eceff1'],
+  'repair':       ['#69ff74', '#b9fbc0'],
+  'burn':         ['#ff6d00', '#ffcc02'],
+  'poison':       ['#69ff74', '#b2dfdb'],
+  'shield_cap':   ['#00e5ff', '#b2ebf2'],
+  'speed':        ['#ea80fc', '#f8bbd0'],
+};
+
+/**
+ * Draws an 8×8 pixel sprite onto a canvas element.
+ * Looks up the sprite in WEAPON_SPRITE_GRIDS first, then POWERUP_SPRITE_GRIDS.
+ *
+ * @param canvas  The canvas to draw on (should be 16×16 or 24×24 px).
+ * @param key     Sprite lookup key — a weapon name or a powerup icon key.
+ */
+export function drawSpriteToCanvas(canvas: HTMLCanvasElement, key: string): void {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const grid = WEAPON_SPRITE_GRIDS[key] ?? POWERUP_SPRITE_GRIDS[key];
+  const colors = WEAPON_SPRITE_COLORS[key] ?? POWERUP_SPRITE_COLORS[key];
+  if (!grid || !colors) return;
+
+  const p = canvas.width / 8;
+  const [c1, c2] = colors;
+  for (let row = 0; row < grid.length; row++) {
+    const rowStr = grid[row]!;
+    for (let col = 0; col < rowStr.length; col++) {
+      const ch = rowStr[col];
+      if (ch === '1') {
+        ctx.fillStyle = c1;
+        ctx.fillRect(col * p, row * p, p, p);
+      } else if (ch === '2') {
+        ctx.fillStyle = c2;
+        ctx.fillRect(col * p, row * p, p, p);
+      }
+    }
+  }
+}
+
 export class HUD {
   /**
    * Main draw call — renders all HUD elements onto `ctx` in screen space.

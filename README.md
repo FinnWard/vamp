@@ -204,9 +204,9 @@ Evolutions consume two base weapons and replace them with a stronger combined fo
 
 **`EnemySpawner`** manages:
 
-- **Spawn interval**: starts at 0.9 s, floors at 0.2 s as time passes.
+- **Spawn interval**: starts at 1.8 s, floors at 0.4 s as time passes (≈ half original density for a less overwhelming experience).
 - **Spawn count**: 1 enemy per batch initially, grows by 1 every 20 seconds.
-- **HP scaling**: combined linear + multiplicative formula tied to elapsed minutes so early-game enemies are manageable but late-game enemies are significantly tankier.
+- **HP scaling**: combined linear + multiplicative formula tied to elapsed minutes so early-game enemies are manageable but late-game enemies are significantly tankier.  Base HP has been doubled to compensate for the reduced spawn rate.
 - **Type selection**: roll-based weighted probability; rarer types (ranged, splitter) unlock after certain time thresholds.
 - **Spawn position**: one of the four screen edges, offset just beyond the visible area.
 

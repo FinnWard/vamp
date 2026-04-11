@@ -194,6 +194,7 @@
       transition: border-color 0.1s, transform 0.1s, background 0.1s;
       display: flex;
       flex-direction: column;
+      align-items: center;
       gap: 10px;
       text-align: center;
       image-rendering: pixelated;
@@ -206,6 +207,12 @@
       box-shadow: 0 0 14px #00e5ff44;
     }
 
+    .card-sprite {
+      image-rendering: pixelated;
+      width: 48px;
+      height: 48px;
+    }
+
     .card-label {
       color: #e0f7fa;
       font-size: 0.6rem;
@@ -216,6 +223,56 @@
       color: #4dd0e1;
       font-size: 0.5rem;
       line-height: 1.6;
+    }
+
+    /* ── Pause powerup section ─────────────────────────────────── */
+    #pausePowerups {
+      width: 100%;
+      max-width: 760px;
+    }
+
+    .pause-powerups-heading {
+      color: #4dd0e1;
+      font-size: 0.5rem;
+      letter-spacing: 3px;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .pause-powerups-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .pause-powerup-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      background: #020818;
+      border: 1px solid #0d47a1;
+      padding: 8px 10px;
+      width: 90px;
+    }
+
+    .pause-powerup-sprite {
+      image-rendering: pixelated;
+      width: 32px;
+      height: 32px;
+    }
+
+    .pause-powerup-name {
+      color: #80cbc4;
+      font-size: 0.32rem;
+      text-align: center;
+      letter-spacing: 1px;
+    }
+
+    .pause-powerup-stacks {
+      color: #ffd740;
+      font-size: 0.5rem;
     }
 
     /* ── Menu (pause) button ───────────────────────────────────── */
@@ -295,6 +352,8 @@
       .pause-weapon-name { font-size: 0.45rem; }
       .pause-weapon-level { font-size: 0.4rem; }
       .pause-weapon-stats { font-size: 0.38rem; }
+      .pause-powerup-item { width: 72px; padding: 6px 8px; }
+      .pause-powerup-name { font-size: 0.28rem; }
       #resumeBtn         { font-size: 0.55rem; padding: 10px 24px; }
       #restartBtn        { font-size: 0.55rem; padding: 10px 24px; }
       #gameOverOverlay h1 { font-size: 1.2rem; }
@@ -511,6 +570,7 @@
     <h2 id="pauseTitle">⏸ PAUSED</h2>
     <div id="pauseStats"></div>
     <div id="pauseWeapons"></div>
+    <div id="pausePowerups"></div>
     <button id="resumeBtn">RESUME</button>
   </div>
 

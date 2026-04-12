@@ -760,10 +760,10 @@ export class EnemySpawner {
   // ── Difficulty curves ──────────────────────────────────────────────────────
 
   /**
-   * Seconds between spawns.  Starts at 3.6 s and floors at 0.8 s.
+   * Seconds between spawns.  Base starts at 3.6 s and floors at 0.8 s
+   * (before difficulty-speed multiplier is applied, which can lower it further).
    * Decreasing linearly over time makes early-game calmer.
-   * Adjusted by the difficulty spawn-rate multiplier.
-   * Spawn rate is approximately half the previous rate to reduce enemy swarm density.
+   * Enemies spawn half as often compared to the previous rate.
    */
   private spawnInterval(): number {
     const base = Math.max(0.8, 3.6 - this.elapsed * 0.028);

@@ -135,7 +135,7 @@ export class MagicBolt implements Weapon {
   readonly isEvolution = false;
   level = 1;
   cooldown = 0.8;
-  damage = 15;
+  damage = 30;
   speed = 380;
   projectileRadius = 6;
   pierce = 0;
@@ -757,7 +757,7 @@ class HomingMissile {
 
 export class MissileBarrage implements Weapon {
   readonly name = 'Missile Barrage'; readonly isEvolution = false; level = 1;
-  cooldown = 1.8; damage = 35; count = 1; explosionRadius = 70;
+  cooldown = 1.8; damage = 70; count = 1; explosionRadius = 70;
   totalDamageDealt = 0;
   private timer = 0; private missiles: HomingMissile[] = []; private effects: ExplosionEffect[] = [];
   private cameraRef: Camera | null = null;
@@ -807,7 +807,7 @@ export class MissileBarrage implements Weapon {
 
 export class PulseCannon implements Weapon {
   readonly name = 'Pulse Cannon'; readonly isEvolution = false; level = 1;
-  cooldown = 1.6; damage = 18; directions = 4;
+  cooldown = 1.6; damage = 36; directions = 4;
   totalDamageDealt = 0;
   private timer = 0;
   private readonly color = '#ffd740';

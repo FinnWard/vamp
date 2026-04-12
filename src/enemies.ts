@@ -119,14 +119,14 @@ export function setDifficultyMultipliers(hp: number, damage: number, speed: numb
  * HP is scaled at construction time by the EnemySpawner's hpScale() value.
  */
 const ENEMY_TYPES: Record<EnemyType, EnemyStats> = {
-  grunt:      { radius: 16, speed: 90,  hp: 36,  damage: 18, xpValue: 2,  color: '#e53935' },
-  fast:       { radius: 12, speed: 155, hp: 20,  damage: 12, xpValue: 2,  color: '#ff7043' },
-  tank:       { radius: 26, speed: 52,  hp: 140, damage: 30, xpValue: 6,  color: '#7b1fa2' },
-  charger:    { radius: 15, speed: 85,  hp: 50,  damage: 27, xpValue: 4,  color: '#f57f17' },
-  ranged:     { radius: 13, speed: 75,  hp: 24,  damage: 15, xpValue: 4,  color: '#00897b' },
-  splitter:   { radius: 22, speed: 55,  hp: 90,  damage: 22, xpValue: 6,  color: '#558b2f' },
-  splitterlet:{ radius: 9,  speed: 120, hp: 16,  damage: 9,  xpValue: 2,  color: '#8bc34a' },
-  boss:       { radius: 42, speed: 40,  hp: 1200,damage: 45, xpValue: 40, color: '#b71c1c' },
+  grunt:      { radius: 16, speed: 90,  hp: 72,  damage: 36, xpValue: 2,  color: '#e53935' },
+  fast:       { radius: 12, speed: 155, hp: 40,  damage: 24, xpValue: 2,  color: '#ff7043' },
+  tank:       { radius: 26, speed: 52,  hp: 280, damage: 60, xpValue: 6,  color: '#7b1fa2' },
+  charger:    { radius: 15, speed: 85,  hp: 100, damage: 54, xpValue: 4,  color: '#f57f17' },
+  ranged:     { radius: 13, speed: 75,  hp: 48,  damage: 30, xpValue: 4,  color: '#00897b' },
+  splitter:   { radius: 22, speed: 55,  hp: 180, damage: 44, xpValue: 6,  color: '#558b2f' },
+  splitterlet:{ radius: 9,  speed: 120, hp: 32,  damage: 18, xpValue: 2,  color: '#8bc34a' },
+  boss:       { radius: 42, speed: 40,  hp: 2400,damage: 90, xpValue: 40, color: '#b71c1c' },
 };
 
 // ─── Enemy ────────────────────────────────────────────────────────────────────
@@ -760,13 +760,13 @@ export class EnemySpawner {
   // ── Difficulty curves ──────────────────────────────────────────────────────
 
   /**
-   * Seconds between spawns.  Starts at 1.8 s and floors at 0.4 s.
+   * Seconds between spawns.  Starts at 3.6 s and floors at 0.8 s.
    * Decreasing linearly over time makes early-game calmer.
    * Adjusted by the difficulty spawn-rate multiplier.
-   * Spawn rate is approximately half the original to reduce enemy swarm density.
+   * Spawn rate is approximately half the previous rate to reduce enemy swarm density.
    */
   private spawnInterval(): number {
-    const base = Math.max(0.4, 1.8 - this.elapsed * 0.014);
+    const base = Math.max(0.8, 3.6 - this.elapsed * 0.028);
     return base / _diffSpeedMult;
   }
 

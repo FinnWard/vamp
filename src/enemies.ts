@@ -762,6 +762,9 @@ export class Enemy {
 // Manages the wave / spawn system.  Each frame it advances an internal timer
 // and spawns batches of enemies when the timer fires.  Both the spawn interval
 // and the batch count tighten over time so the game gets harder as it goes on.
+// Every batch is assigned a single random edge so enemies arrive as a
+// directional wave, giving the player a clear threat to react to rather than
+// instant encirclement.
 
 export class EnemySpawner {
   /** All currently active (alive) enemies plus enemies that died this frame
@@ -839,16 +842,24 @@ export class EnemySpawner {
   }
 
   /**
+   * Returns a random edge index (0 = top, 1 = bottom, 2 = left, 3 = right).
+   * Called once per batch so every enemy in the batch shares the same edge,
+   * giving the player a clear directional threat to react to.
+   */
+  private pickWaveSide(): number {
+    return Math.floor(Math.random() * 4);
+  }
+
+  /**
    * Spawns enemies outside the visible screen area.
-   * Randomly selects one of the four edges (top / bottom / left / right),
-   * then picks a position along that edge so enemies approach from all sides.
+   * Uses the provided `side` value (0 = top, 1 = bottom, 2 = left, 3 = right)
+   * so that every enemy in a batch can be placed on the same edge.
    * A margin of 80 px keeps enemies just off-screen at spawn time.
    */
-  private spawnPosition(player: Player): { x: number; y: number } {
+  private spawnPosition(player: Player, side: number): { x: number; y: number } {
     const margin = 80;
     const hw = this.canvas.width / 2 + margin;
     const hh = this.canvas.height / 2 + margin;
-    const side = Math.floor(Math.random() * 4);
     let sx: number;
     let sy: number;
     // side 0 = top, 1 = bottom, 2 = left, 3 = right
@@ -879,19 +890,22 @@ export class EnemySpawner {
     let bossSpawned = false;
     if (this.bossTimer >= BOSS_SPAWN_INTERVAL && this.activeBoss === null) {
       this.bossTimer = 0;
-      const pos = this.spawnPosition(player);
+      const pos = this.spawnPosition(player, this.pickWaveSide());
       this.enemies.push(new Enemy(pos.x, pos.y, 'boss', this.hpScale()));
       bossSpawned = true;
     }
 
     // ── Regular enemy spawning ──────────────────────────────────────────────
+    // Each batch shares a single edge so the player faces a directional wave
+    // rather than being encircled from all sides simultaneously.
     const interval = this.spawnInterval();
     const scale    = this.hpScale();
     while (this.timer >= interval) {
       this.timer -= interval;
       const count = this.spawnCount();
+      const waveSide = this.pickWaveSide();
       for (let i = 0; i < count; i++) {
-        const pos = this.spawnPosition(player);
+        const pos = this.spawnPosition(player, waveSide);
         this.enemies.push(new Enemy(pos.x, pos.y, this.pickType(), scale));
       }
     }

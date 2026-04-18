@@ -62,6 +62,11 @@ interface EnemyStats {
 /** Hard cap on enemy movement speed (px/s) — keeps fast enemies from being extreme. */
 const MAX_ENEMY_SPEED = 160;
 
+/** Radius (px) within which an enemy repels its neighbours to prevent blob clumping. */
+const REPULSION_RADIUS = 60;
+/** Fraction of an enemy's base speed applied as a separation force away from nearby enemies. */
+const REPULSION_STRENGTH = 0.35;
+
 /** HP multiplier added linearly per minute of real-time elapsed. */
 const HP_SCALE_LINEAR_PER_MIN = 0.25;
 /** HP multiplier applied multiplicatively per minute of real-time elapsed. */
@@ -276,7 +281,7 @@ export class Enemy {
    * player overlap and applies contact damage.  Contact damage is multiplied
    * by dt so it represents "damage per second" even though it's applied every frame.
    */
-  update(dt: number, player: Player): void {
+  update(dt: number, player: Player, allEnemies: Enemy[]): void {
     if (!this.alive) return;
 
     // ── DoT tick processing ──────────────────────────────────────────────────
@@ -318,6 +323,30 @@ export class Enemy {
     const ndx = dist > 0 ? dx / dist : 0;
     const ndy = dist > 0 ? dy / dist : 0;
 
+    // ── Enemy-enemy separation (boid repulsion) ──────────────────────────────
+    // Accumulate a gentle push away from every nearby alive enemy to prevent
+    // the pack from collapsing into a single blob.
+    let repX = 0;
+    let repY = 0;
+    for (const other of allEnemies) {
+      if (other === this || !other.alive) continue;
+      const ox = this.x - other.x;
+      const oy = this.y - other.y;
+      const d2 = ox * ox + oy * oy;
+      if (d2 < REPULSION_RADIUS * REPULSION_RADIUS && d2 > 0) {
+        const d = Math.sqrt(d2);
+        // Weight by proximity: closer neighbours push harder (linear falloff)
+        const weight = 1 - d / REPULSION_RADIUS;
+        repX += (ox / d) * weight;
+        repY += (oy / d) * weight;
+      }
+    }
+    // Normalise the accumulated repulsion vector (if non-zero)
+    const repLen = Math.sqrt(repX * repX + repY * repY);
+    const rnx = repLen > 0 ? repX / repLen : 0;
+    const rny = repLen > 0 ? repY / repLen : 0;
+    const repSpeed = Math.min(this.speed, MAX_ENEMY_SPEED) * REPULSION_STRENGTH * this.slowMultiplier;
+
     // Dispatch to per-type movement logic
     if (this.type === 'charger') {
       this._updateCharger(dt, ndx, ndy);
@@ -329,6 +358,10 @@ export class Enemy {
       this.x += ndx * effectiveSpeed * dt;
       this.y += ndy * effectiveSpeed * dt;
     }
+
+    // Apply the separation nudge on top of whatever movement was applied above
+    this.x += rnx * repSpeed * dt;
+    this.y += rny * repSpeed * dt;
 
     // Contact damage: applied as long as the enemy overlaps the player
     if (circlesOverlap(this.x, this.y, this.radius, player.x, player.y, player.radius)) {
@@ -865,7 +898,7 @@ export class EnemySpawner {
 
     // Update all enemies (alive or freshly-dead this frame)
     for (const e of this.enemies) {
-      e.update(dt, player);
+      e.update(dt, player, this.enemies);
     }
 
     return bossSpawned;

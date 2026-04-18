@@ -775,7 +775,7 @@ export class EnemySpawner {
    * Together with the tightening interval, this creates escalating pressure.
    */
   private spawnCount(): number {
-    return Math.floor(1 + this.elapsed / 20);
+    return Math.min(4, Math.floor(1 + this.elapsed / 30));
   }
 
   /**

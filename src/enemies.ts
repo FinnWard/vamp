@@ -30,8 +30,8 @@
 // player (timeSinceContact).  The timer resets to 0 on every frame that the
 // enemy overlaps the player.  If a non-boss enemy goes STALE_DESPAWN_TIME
 // seconds without any contact it is quietly removed (alive set to false).
-// This prevents the "blob" of enemies from accumulating indefinitely while
-// the player kites, and creates a natural pacing rhythm.
+// This prevents the "blob" from accumulating indefinitely while the player
+// kites, and creates a natural pacing rhythm.
 //
 // DoT mechanic
 // ─────────────
@@ -70,6 +70,13 @@ interface EnemyStats {
 
 /** Hard cap on enemy movement speed (px/s) — keeps fast enemies from being extreme. */
 const MAX_ENEMY_SPEED = 160;
+/** Hard cap on the total number of live enemies (boss excluded). */
+const MAX_ENEMIES = 60;
+
+/** Radius (px) within which an enemy repels its neighbours to prevent blob clumping. */
+const REPULSION_RADIUS = 60;
+/** Fraction of an enemy's base speed applied as a separation force away from nearby enemies. */
+const REPULSION_STRENGTH = 0.35;
 
 /** HP multiplier added linearly per minute of real-time elapsed. */
 const HP_SCALE_LINEAR_PER_MIN = 0.25;
@@ -81,6 +88,13 @@ const BOSS_SPAWN_INTERVAL = 120;
 
 /** Seconds between each DoT damage tick. */
 const DOT_TICK_INTERVAL = 0.5;
+
+/** Minimum angle (degrees) of the random spawn-direction jitter applied to each enemy. */
+const SPAWN_JITTER_MIN_DEG = 15;
+/** Maximum angle (degrees) of the random spawn-direction jitter applied to each enemy. */
+const SPAWN_JITTER_MAX_DEG = 25;
+/** Seconds over which the spawn-direction jitter linearly fades to zero. */
+const SPAWN_FAN_DURATION = 2.0;
 
 /**
  * Seconds a non-boss enemy may exist without touching the player before it is
@@ -203,6 +217,16 @@ export class Enemy {
   private _chargeVelX: number = 0;
   private _chargeVelY: number = 0;
 
+  // ── Spawn-direction jitter ────────────────────────────────────────────────
+  /**
+   * Random angle offset (radians) applied to the initial movement bearing.
+   * Positive or negative with equal probability; zero for the boss type.
+   * Fades linearly to zero over SPAWN_FAN_DURATION seconds.
+   */
+  private readonly _spawnOffsetAngle: number;
+  /** Seconds elapsed since this enemy was created; used to fade the jitter. */
+  private _spawnAge: number = 0;
+
   // ── Ranged-specific preferred distance ───────────────────────────────────
   /** The distance (world px) the ranged enemy tries to maintain from the player. */
   private static readonly RANGED_PREF_DIST = 220;
@@ -250,6 +274,15 @@ export class Enemy {
     // Stagger the initial charge timer so a group of chargers doesn't all
     // dash at exactly the same moment.
     this._chargeCooldown = type === 'charger' ? 1 + Math.random() * 2 : 0;
+
+    // Random spawn-direction jitter (±15–25°), absent for the boss so it
+    // always charges straight at the player for maximum drama.
+    if (type === 'boss') {
+      this._spawnOffsetAngle = 0;
+    } else {
+      const mag = (SPAWN_JITTER_MIN_DEG + Math.random() * (SPAWN_JITTER_MAX_DEG - SPAWN_JITTER_MIN_DEG)) * Math.PI / 180;
+      this._spawnOffsetAngle = Math.random() < 0.5 ? mag : -mag;
+    }
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -300,7 +333,7 @@ export class Enemy {
    * Non-boss enemies that have gone STALE_DESPAWN_TIME seconds without touching
    * the player are quietly removed to prevent blob accumulation while kiting.
    */
-  update(dt: number, player: Player): void {
+  update(dt: number, player: Player, allEnemies: Enemy[]): void {
     if (!this.alive) return;
 
     // ── Age / stale-despawn tracking ─────────────────────────────────────────
@@ -339,12 +372,52 @@ export class Enemy {
       this.slowMultiplier = Math.min(1.0, this.slowMultiplier + dt * 1.5);
     }
 
+    // Advance the spawn-age clock (used to fade out the bearing jitter).
+    this._spawnAge += dt;
+
     // Direction vector toward the player (normalised)
     const dx = player.x - this.x;
     const dy = player.y - this.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const ndx = dist > 0 ? dx / dist : 0;
-    const ndy = dist > 0 ? dy / dist : 0;
+    let ndx = dist > 0 ? dx / dist : 0;
+    let ndy = dist > 0 ? dy / dist : 0;
+
+    // Apply the spawn-direction jitter, fading linearly to zero over
+    // SPAWN_FAN_DURATION seconds so enemies arc outward at first then
+    // curve back toward the player.
+    if (this._spawnAge < SPAWN_FAN_DURATION) {
+      const angle = this._spawnOffsetAngle * (1 - this._spawnAge / SPAWN_FAN_DURATION);
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+      const rx = ndx * cosA - ndy * sinA;
+      const ry = ndx * sinA + ndy * cosA;
+      ndx = rx;
+      ndy = ry;
+    }
+
+    // ── Enemy-enemy separation (boid repulsion) ──────────────────────────────
+    // Accumulate a gentle push away from every nearby alive enemy to prevent
+    // the pack from collapsing into a single blob.
+    let repX = 0;
+    let repY = 0;
+    for (const other of allEnemies) {
+      if (other === this || !other.alive) continue;
+      const ox = this.x - other.x;
+      const oy = this.y - other.y;
+      const d2 = ox * ox + oy * oy;
+      if (d2 < REPULSION_RADIUS * REPULSION_RADIUS && d2 > 0) {
+        const d = Math.sqrt(d2);
+        // Weight by proximity: closer neighbours push harder (linear falloff)
+        const weight = 1 - d / REPULSION_RADIUS;
+        repX += (ox / d) * weight;
+        repY += (oy / d) * weight;
+      }
+    }
+    // Normalise the accumulated repulsion vector (if non-zero)
+    const repLen = Math.sqrt(repX * repX + repY * repY);
+    const rnx = repLen > 0 ? repX / repLen : 0;
+    const rny = repLen > 0 ? repY / repLen : 0;
+    const repSpeed = Math.min(this.speed, MAX_ENEMY_SPEED) * REPULSION_STRENGTH * this.slowMultiplier;
 
     // Dispatch to per-type movement logic
     if (this.type === 'charger') {
@@ -357,6 +430,10 @@ export class Enemy {
       this.x += ndx * effectiveSpeed * dt;
       this.y += ndy * effectiveSpeed * dt;
     }
+
+    // Apply the separation nudge on top of whatever movement was applied above
+    this.x += rnx * repSpeed * dt;
+    this.y += rny * repSpeed * dt;
 
     // Contact damage: applied as long as the enemy overlaps the player.
     // Touching the player resets the stale-despawn timer.
@@ -765,6 +842,9 @@ export class Enemy {
 // Manages the wave / spawn system.  Each frame it advances an internal timer
 // and spawns batches of enemies when the timer fires.  Both the spawn interval
 // and the batch count tighten over time so the game gets harder as it goes on.
+// Every batch is assigned a single random edge so enemies arrive as a
+// directional wave, giving the player a clear threat to react to rather than
+// instant encirclement.
 
 export class EnemySpawner {
   /** All currently active (alive) enemies plus enemies that died this frame
@@ -776,6 +856,13 @@ export class EnemySpawner {
 
   /** Accumulator for the next spawn batch. */
   private timer: number = 0;
+
+  /**
+   * The screen edge used for the current wave batch (0=top, 1=bottom, 2=left,
+   * 3=right).  All enemies in the same batch spawn from this edge, then a new
+   * edge is chosen for the next batch so the player can react directionally.
+   */
+  private currentWaveSide: number = Math.floor(Math.random() * 4);
 
   /**
    * Boss spawn countdown.  Counts up to BOSS_SPAWN_INTERVAL every frame.
@@ -811,7 +898,7 @@ export class EnemySpawner {
    * Together with the tightening interval, this creates escalating pressure.
    */
   private spawnCount(): number {
-    return Math.floor(1 + this.elapsed / 20);
+    return Math.min(4, Math.floor(1 + this.elapsed / 30));
   }
 
   /**
@@ -842,16 +929,14 @@ export class EnemySpawner {
   }
 
   /**
-   * Spawns enemies outside the visible screen area.
-   * Randomly selects one of the four edges (top / bottom / left / right),
-   * then picks a position along that edge so enemies approach from all sides.
+   * Spawns enemies outside the visible screen area on the given edge.
    * A margin of 80 px keeps enemies just off-screen at spawn time.
+   * @param side 0=top, 1=bottom, 2=left, 3=right
    */
-  private spawnPosition(player: Player): { x: number; y: number } {
+  private spawnPosition(player: Player, side: number): { x: number; y: number } {
     const margin = 80;
     const hw = this.canvas.width / 2 + margin;
     const hh = this.canvas.height / 2 + margin;
-    const side = Math.floor(Math.random() * 4);
     let sx: number;
     let sy: number;
     // side 0 = top, 1 = bottom, 2 = left, 3 = right
@@ -861,6 +946,17 @@ export class EnemySpawner {
     else                 { sx = hw;  sy = randomRange(-hh, hh); }
     // Offset is in screen space; convert to world space by adding camera (player) position
     return { x: player.x + sx, y: player.y + sy };
+  }
+
+  /**
+   * Picks a new wave side that is different from the current one.
+   * Advances by 1, 2, or 3 positions (each with 33 % probability) so the
+   * next batch never comes from the same edge as the previous one, giving
+   * varied but non-repetitive directional pressure.
+   */
+  private advanceWaveSide(): void {
+    const next = (this.currentWaveSide + 1 + Math.floor(Math.random() * 3)) % 4;
+    this.currentWaveSide = next;
   }
 
   // ── Per-frame logic ────────────────────────────────────────────────────────
@@ -882,26 +978,32 @@ export class EnemySpawner {
     let bossSpawned = false;
     if (this.bossTimer >= BOSS_SPAWN_INTERVAL && this.activeBoss === null) {
       this.bossTimer = 0;
-      const pos = this.spawnPosition(player);
+      const bossSide = Math.floor(Math.random() * 4);
+      const pos = this.spawnPosition(player, bossSide);
       this.enemies.push(new Enemy(pos.x, pos.y, 'boss', this.hpScale()));
       bossSpawned = true;
     }
 
     // ── Regular enemy spawning ──────────────────────────────────────────────
+    // Each batch shares a single edge so the player faces a directional wave
+    // rather than being encircled from all sides simultaneously.
     const interval = this.spawnInterval();
     const scale    = this.hpScale();
     while (this.timer >= interval) {
       this.timer -= interval;
       const count = this.spawnCount();
+      const side = this.currentWaveSide;
       for (let i = 0; i < count; i++) {
-        const pos = this.spawnPosition(player);
+        if (this.enemies.filter(e => !e.isBoss).length >= MAX_ENEMIES) break;
+        const pos = this.spawnPosition(player, side);
         this.enemies.push(new Enemy(pos.x, pos.y, this.pickType(), scale));
       }
+      this.advanceWaveSide();
     }
 
     // Update all enemies (alive or freshly-dead this frame)
     for (const e of this.enemies) {
-      e.update(dt, player);
+      e.update(dt, player, this.enemies);
     }
 
     return bossSpawned;

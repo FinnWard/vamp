@@ -80,6 +80,13 @@ const BOSS_SPAWN_INTERVAL = 120;
 /** Seconds between each DoT damage tick. */
 const DOT_TICK_INTERVAL = 0.5;
 
+/** Minimum angle (degrees) of the random spawn-direction jitter applied to each enemy. */
+const SPAWN_JITTER_MIN_DEG = 15;
+/** Maximum angle (degrees) of the random spawn-direction jitter applied to each enemy. */
+const SPAWN_JITTER_MAX_DEG = 25;
+/** Seconds over which the spawn-direction jitter linearly fades to zero. */
+const SPAWN_FAN_DURATION = 2.0;
+
 // ─── Damage event bus ─────────────────────────────────────────────────────────
 
 /** Filled by Enemy.takeDamage() each frame; main.ts drains this for floating numbers. */
@@ -194,6 +201,16 @@ export class Enemy {
   private _chargeVelX: number = 0;
   private _chargeVelY: number = 0;
 
+  // ── Spawn-direction jitter ────────────────────────────────────────────────
+  /**
+   * Random angle offset (radians) applied to the initial movement bearing.
+   * Positive or negative with equal probability; zero for the boss type.
+   * Fades linearly to zero over SPAWN_FAN_DURATION seconds.
+   */
+  private readonly _spawnOffsetAngle: number;
+  /** Seconds elapsed since this enemy was created; used to fade the jitter. */
+  private _spawnAge: number = 0;
+
   // ── Ranged-specific preferred distance ───────────────────────────────────
   /** The distance (world px) the ranged enemy tries to maintain from the player. */
   private static readonly RANGED_PREF_DIST = 220;
@@ -235,6 +252,15 @@ export class Enemy {
     // Stagger the initial charge timer so a group of chargers doesn't all
     // dash at exactly the same moment.
     this._chargeCooldown = type === 'charger' ? 1 + Math.random() * 2 : 0;
+
+    // Random spawn-direction jitter (±15–25°), absent for the boss so it
+    // always charges straight at the player for maximum drama.
+    if (type === 'boss') {
+      this._spawnOffsetAngle = 0;
+    } else {
+      const mag = (SPAWN_JITTER_MIN_DEG + Math.random() * (SPAWN_JITTER_MAX_DEG - SPAWN_JITTER_MIN_DEG)) * Math.PI / 180;
+      this._spawnOffsetAngle = Math.random() < 0.5 ? mag : -mag;
+    }
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -318,12 +344,28 @@ export class Enemy {
       this.slowMultiplier = Math.min(1.0, this.slowMultiplier + dt * 1.5);
     }
 
+    // Advance the spawn-age clock (used to fade out the bearing jitter).
+    this._spawnAge += dt;
+
     // Direction vector toward the player (normalised)
     const dx = player.x - this.x;
     const dy = player.y - this.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const ndx = dist > 0 ? dx / dist : 0;
-    const ndy = dist > 0 ? dy / dist : 0;
+    let ndx = dist > 0 ? dx / dist : 0;
+    let ndy = dist > 0 ? dy / dist : 0;
+
+    // Apply the spawn-direction jitter, fading linearly to zero over
+    // SPAWN_FAN_DURATION seconds so enemies arc outward at first then
+    // curve back toward the player.
+    if (this._spawnAge < SPAWN_FAN_DURATION) {
+      const angle = this._spawnOffsetAngle * (1 - this._spawnAge / SPAWN_FAN_DURATION);
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+      const rx = ndx * cosA - ndy * sinA;
+      const ry = ndx * sinA + ndy * cosA;
+      ndx = rx;
+      ndy = ry;
+    }
 
     // ── Enemy-enemy separation (boid repulsion) ──────────────────────────────
     // Accumulate a gentle push away from every nearby alive enemy to prevent
@@ -777,6 +819,13 @@ export class EnemySpawner {
   private timer: number = 0;
 
   /**
+   * The screen edge used for the current wave batch (0=top, 1=bottom, 2=left,
+   * 3=right).  All enemies in the same batch spawn from this edge, then a new
+   * edge is chosen for the next batch so the player can react directionally.
+   */
+  private currentWaveSide: number = Math.floor(Math.random() * 4);
+
+  /**
    * Boss spawn countdown.  Counts up to BOSS_SPAWN_INTERVAL every frame.
    * Public so main.ts can display it as a warning.
    */
@@ -841,16 +890,14 @@ export class EnemySpawner {
   }
 
   /**
-   * Spawns enemies outside the visible screen area.
-   * Randomly selects one of the four edges (top / bottom / left / right),
-   * then picks a position along that edge so enemies approach from all sides.
+   * Spawns enemies outside the visible screen area on the given edge.
    * A margin of 80 px keeps enemies just off-screen at spawn time.
+   * @param side 0=top, 1=bottom, 2=left, 3=right
    */
-  private spawnPosition(player: Player): { x: number; y: number } {
+  private spawnPosition(player: Player, side: number): { x: number; y: number } {
     const margin = 80;
     const hw = this.canvas.width / 2 + margin;
     const hh = this.canvas.height / 2 + margin;
-    const side = Math.floor(Math.random() * 4);
     let sx: number;
     let sy: number;
     // side 0 = top, 1 = bottom, 2 = left, 3 = right
@@ -860,6 +907,17 @@ export class EnemySpawner {
     else                 { sx = hw;  sy = randomRange(-hh, hh); }
     // Offset is in screen space; convert to world space by adding camera (player) position
     return { x: player.x + sx, y: player.y + sy };
+  }
+
+  /**
+   * Picks a new wave side that is different from the current one.
+   * Advances by 1, 2, or 3 positions (each with 33 % probability) so the
+   * next batch never comes from the same edge as the previous one, giving
+   * varied but non-repetitive directional pressure.
+   */
+  private advanceWaveSide(): void {
+    const next = (this.currentWaveSide + 1 + Math.floor(Math.random() * 3)) % 4;
+    this.currentWaveSide = next;
   }
 
   // ── Per-frame logic ────────────────────────────────────────────────────────
@@ -881,7 +939,8 @@ export class EnemySpawner {
     let bossSpawned = false;
     if (this.bossTimer >= BOSS_SPAWN_INTERVAL && this.activeBoss === null) {
       this.bossTimer = 0;
-      const pos = this.spawnPosition(player);
+      const bossSide = Math.floor(Math.random() * 4);
+      const pos = this.spawnPosition(player, bossSide);
       this.enemies.push(new Enemy(pos.x, pos.y, 'boss', this.hpScale()));
       bossSpawned = true;
     }
@@ -892,11 +951,13 @@ export class EnemySpawner {
     while (this.timer >= interval) {
       this.timer -= interval;
       const count = this.spawnCount();
+      const side = this.currentWaveSide;
       for (let i = 0; i < count; i++) {
         if (this.enemies.filter(e => !e.isBoss).length >= MAX_ENEMIES) break;
-        const pos = this.spawnPosition(player);
+        const pos = this.spawnPosition(player, side);
         this.enemies.push(new Enemy(pos.x, pos.y, this.pickType(), scale));
       }
+      this.advanceWaveSide();
     }
 
     // Update all enemies (alive or freshly-dead this frame)

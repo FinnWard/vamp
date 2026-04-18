@@ -78,6 +78,13 @@ const BOSS_SPAWN_INTERVAL = 120;
 /** Seconds between each DoT damage tick. */
 const DOT_TICK_INTERVAL = 0.5;
 
+/** Minimum angle (degrees) of the random spawn-direction jitter applied to each enemy. */
+const SPAWN_JITTER_MIN_DEG = 15;
+/** Maximum angle (degrees) of the random spawn-direction jitter applied to each enemy. */
+const SPAWN_JITTER_MAX_DEG = 25;
+/** Seconds over which the spawn-direction jitter linearly fades to zero. */
+const SPAWN_FAN_DURATION = 2.0;
+
 // ─── Damage event bus ─────────────────────────────────────────────────────────
 
 /** Filled by Enemy.takeDamage() each frame; main.ts drains this for floating numbers. */
@@ -192,6 +199,16 @@ export class Enemy {
   private _chargeVelX: number = 0;
   private _chargeVelY: number = 0;
 
+  // ── Spawn-direction jitter ────────────────────────────────────────────────
+  /**
+   * Random angle offset (radians) applied to the initial movement bearing.
+   * Positive or negative with equal probability; zero for the boss type.
+   * Fades linearly to zero over SPAWN_FAN_DURATION seconds.
+   */
+  private readonly _spawnOffsetAngle: number;
+  /** Seconds elapsed since this enemy was created; used to fade the jitter. */
+  private _spawnAge: number = 0;
+
   // ── Ranged-specific preferred distance ───────────────────────────────────
   /** The distance (world px) the ranged enemy tries to maintain from the player. */
   private static readonly RANGED_PREF_DIST = 220;
@@ -233,6 +250,15 @@ export class Enemy {
     // Stagger the initial charge timer so a group of chargers doesn't all
     // dash at exactly the same moment.
     this._chargeCooldown = type === 'charger' ? 1 + Math.random() * 2 : 0;
+
+    // Random spawn-direction jitter (±15–25°), absent for the boss so it
+    // always charges straight at the player for maximum drama.
+    if (type === 'boss') {
+      this._spawnOffsetAngle = 0;
+    } else {
+      const mag = (SPAWN_JITTER_MIN_DEG + Math.random() * (SPAWN_JITTER_MAX_DEG - SPAWN_JITTER_MIN_DEG)) * Math.PI / 180;
+      this._spawnOffsetAngle = Math.random() < 0.5 ? mag : -mag;
+    }
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -316,12 +342,28 @@ export class Enemy {
       this.slowMultiplier = Math.min(1.0, this.slowMultiplier + dt * 1.5);
     }
 
+    // Advance the spawn-age clock (used to fade out the bearing jitter).
+    this._spawnAge += dt;
+
     // Direction vector toward the player (normalised)
     const dx = player.x - this.x;
     const dy = player.y - this.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const ndx = dist > 0 ? dx / dist : 0;
-    const ndy = dist > 0 ? dy / dist : 0;
+    let ndx = dist > 0 ? dx / dist : 0;
+    let ndy = dist > 0 ? dy / dist : 0;
+
+    // Apply the spawn-direction jitter, fading linearly to zero over
+    // SPAWN_FAN_DURATION seconds so enemies arc outward at first then
+    // curve back toward the player.
+    if (this._spawnAge < SPAWN_FAN_DURATION) {
+      const angle = this._spawnOffsetAngle * (1 - this._spawnAge / SPAWN_FAN_DURATION);
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+      const rx = ndx * cosA - ndy * sinA;
+      const ry = ndx * sinA + ndy * cosA;
+      ndx = rx;
+      ndy = ry;
+    }
 
     // ── Enemy-enemy separation (boid repulsion) ──────────────────────────────
     // Accumulate a gentle push away from every nearby alive enemy to prevent

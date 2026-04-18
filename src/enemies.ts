@@ -61,6 +61,8 @@ interface EnemyStats {
 
 /** Hard cap on enemy movement speed (px/s) — keeps fast enemies from being extreme. */
 const MAX_ENEMY_SPEED = 160;
+/** Hard cap on the total number of live enemies (boss excluded). */
+const MAX_ENEMIES = 60;
 
 /** Radius (px) within which an enemy repels its neighbours to prevent blob clumping. */
 const REPULSION_RADIUS = 60;
@@ -951,6 +953,7 @@ export class EnemySpawner {
       const count = this.spawnCount();
       const side = this.currentWaveSide;
       for (let i = 0; i < count; i++) {
+        if (this.enemies.filter(e => !e.isBoss).length >= MAX_ENEMIES) break;
         const pos = this.spawnPosition(player, side);
         this.enemies.push(new Enemy(pos.x, pos.y, this.pickType(), scale));
       }

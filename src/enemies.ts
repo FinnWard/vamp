@@ -806,6 +806,9 @@ export class Enemy {
 // Manages the wave / spawn system.  Each frame it advances an internal timer
 // and spawns batches of enemies when the timer fires.  Both the spawn interval
 // and the batch count tighten over time so the game gets harder as it goes on.
+// Every batch is assigned a single random edge so enemies arrive as a
+// directional wave, giving the player a clear threat to react to rather than
+// instant encirclement.
 
 export class EnemySpawner {
   /** All currently active (alive) enemies plus enemies that died this frame
@@ -946,6 +949,8 @@ export class EnemySpawner {
     }
 
     // ── Regular enemy spawning ──────────────────────────────────────────────
+    // Each batch shares a single edge so the player faces a directional wave
+    // rather than being encircled from all sides simultaneously.
     const interval = this.spawnInterval();
     const scale    = this.hpScale();
     while (this.timer >= interval) {

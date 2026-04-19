@@ -186,6 +186,36 @@ const WEAPON_SPRITE_GRIDS: Record<string, string[]> = {
     '1..1..1.',
     '...1....',
   ],
+  'Arc Nova': [
+    '1..1..1.',
+    '.1.11.1.',
+    '..1111..',
+    '11122111',
+    '11122111',
+    '..1111..',
+    '.1.11.1.',
+    '1..1..1.',
+  ],
+  'Event Horizon': [
+    '..1111..',
+    '.122221.',
+    '12....21',
+    '12.11.21',
+    '12.11.21',
+    '12....21',
+    '.122221.',
+    '..1111..',
+  ],
+  'Frost Barrage': [
+    '1..1..11',
+    '.1.1.111',
+    '..111111',
+    '11122111',
+    '11122111',
+    '..111111',
+    '.1.1.111',
+    '1..1..11',
+  ],
 };
 
 /**
@@ -209,6 +239,9 @@ const WEAPON_SPRITE_COLORS: Record<string, [string, string]> = {
   'Solar Flare':     ['#ffea00', '#fff9c4'],
   'Quantum Torpedo': ['#ce93d8', '#e1bee7'],
   'Glacial Storm':   ['#b3e5fc', '#e1f5fe'],
+  'Arc Nova':        ['#b388ff', '#e1bee7'],
+  'Event Horizon':   ['#ce93d8', '#80d8ff'],
+  'Frost Barrage':   ['#80d8ff', '#e1f5fe'],
 };
 
 // ─── Pixel sprite definitions for generic powerups (8×8 grid) ─────────────────

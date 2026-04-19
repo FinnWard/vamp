@@ -191,7 +191,11 @@ const UPGRADE_POOL: Upgrade[] = [
     id: 'add_lightning', label: '🔗 Unlock Ion Chain', desc: 'New weapon: chain zap hitting multiple enemies',
     icon: 'Ion Chain',
     apply: (_w, add) => add('Ion Chain'),
-    requires: (w) => !w.some(x => x.name === 'Ion Chain') && w.length < MAX_WEAPON_SLOTS,
+    requires: (w) =>
+      !w.some(x => x.name === 'Ion Chain') &&
+      !w.some(x => x.name === 'Arc Nova') &&
+      !w.some(x => x.name === 'Event Horizon') &&
+      w.length < MAX_WEAPON_SLOTS,
   },
   {
     id: 'lightning_damage', label: '🔗 Ion Chain – Damage Up', desc: '+30% chain damage',
@@ -285,7 +289,11 @@ const UPGRADE_POOL: Upgrade[] = [
     id: 'add_missile', label: '🚀 Unlock Missile Barrage', desc: 'New weapon: homing explosive missiles',
     icon: 'Missile Barrage',
     apply: (_w, add) => add('Missile Barrage'),
-    requires: (w) => !w.some(x => x.name === 'Missile Barrage') && !w.some(x => x.name === 'Quantum Torpedo') && w.length < MAX_WEAPON_SLOTS,
+    requires: (w) =>
+      !w.some(x => x.name === 'Missile Barrage') &&
+      !w.some(x => x.name === 'Quantum Torpedo') &&
+      !w.some(x => x.name === 'Frost Barrage') &&
+      w.length < MAX_WEAPON_SLOTS,
   },
   {
     id: 'missile_damage', label: '🚀 Missile Barrage – Damage Up', desc: '+30% missile damage',
@@ -310,7 +318,11 @@ const UPGRADE_POOL: Upgrade[] = [
     id: 'add_pulse', label: '💛 Unlock Pulse Cannon', desc: 'New weapon: multi-directional burst',
     icon: 'Pulse Cannon',
     apply: (_w, add) => add('Pulse Cannon'),
-    requires: (w) => !w.some(x => x.name === 'Pulse Cannon') && !w.some(x => x.name === 'Solar Flare') && w.length < MAX_WEAPON_SLOTS,
+    requires: (w) =>
+      !w.some(x => x.name === 'Pulse Cannon') &&
+      !w.some(x => x.name === 'Solar Flare') &&
+      !w.some(x => x.name === 'Arc Nova') &&
+      w.length < MAX_WEAPON_SLOTS,
   },
   {
     id: 'pulse_damage', label: '💛 Pulse Cannon – Damage Up', desc: '+30% pulse damage',
@@ -335,7 +347,11 @@ const UPGRADE_POOL: Upgrade[] = [
     id: 'add_cryo', label: '🧊 Unlock Cryo Beam', desc: 'New weapon: freeze ray that slows enemies',
     icon: 'Cryo Beam',
     apply: (_w, add) => add('Cryo Beam'),
-    requires: (w) => !w.some(x => x.name === 'Cryo Beam') && !w.some(x => x.name === 'Glacial Storm') && w.length < MAX_WEAPON_SLOTS,
+    requires: (w) =>
+      !w.some(x => x.name === 'Cryo Beam') &&
+      !w.some(x => x.name === 'Glacial Storm') &&
+      !w.some(x => x.name === 'Frost Barrage') &&
+      w.length < MAX_WEAPON_SLOTS,
   },
   {
     id: 'cryo_damage', label: '🧊 Cryo Beam – Damage Up', desc: '+30% cryo damage',
@@ -385,6 +401,36 @@ const UPGRADE_POOL: Upgrade[] = [
     requires: (w) =>
       weaponLevel(w, 'Cryo Beam') >= 2 && weaponLevel(w, 'Force Field') >= 2 &&
       !w.some(x => x.name === 'Glacial Storm'),
+  },
+  {
+    id: 'evo_arc_nova',
+    label: '🔗💛 EVOLVE: Arc Nova',
+    desc: 'Merge Ion Chain lv2 + Pulse Cannon lv2 → burst fire + chain lightning',
+    icon: 'Arc Nova',
+    apply: (_w, add, _p, remove) => { remove('Ion Chain'); remove('Pulse Cannon'); add('Arc Nova'); },
+    requires: (w) =>
+      weaponLevel(w, 'Ion Chain') >= 2 && weaponLevel(w, 'Pulse Cannon') >= 2 &&
+      !w.some(x => x.name === 'Arc Nova'),
+  },
+  {
+    id: 'evo_event_horizon',
+    label: '🔗🌀 EVOLVE: Event Horizon',
+    desc: 'Merge Ion Chain lv3 + Gravity Well lv2 → pull field + arc surges',
+    icon: 'Event Horizon',
+    apply: (_w, add, _p, remove) => { remove('Ion Chain'); remove('Gravity Well'); add('Event Horizon'); },
+    requires: (w) =>
+      weaponLevel(w, 'Ion Chain') >= 3 && weaponLevel(w, 'Gravity Well') >= 2 &&
+      !w.some(x => x.name === 'Event Horizon'),
+  },
+  {
+    id: 'evo_frost_barrage',
+    label: '🚀🧊 EVOLVE: Frost Barrage',
+    desc: 'Merge Missile Barrage lv2 + Cryo Beam lv2 → homing frost missiles',
+    icon: 'Frost Barrage',
+    apply: (_w, add, _p, remove) => { remove('Missile Barrage'); remove('Cryo Beam'); add('Frost Barrage'); },
+    requires: (w) =>
+      weaponLevel(w, 'Missile Barrage') >= 2 && weaponLevel(w, 'Cryo Beam') >= 2 &&
+      !w.some(x => x.name === 'Frost Barrage'),
   },
   // ── Evolution upgrades ─────────────────────────────────────────────────────
   {
@@ -459,6 +505,42 @@ const UPGRADE_POOL: Upgrade[] = [
     apply: (w) => upgradeWeapon(w, 'Glacial Storm', 'range'),
     requires: (w) => w.some(x => x.name === 'Glacial Storm') && weaponLevel(w, 'Glacial Storm') < MAX_EVO_WEAPON_LEVEL,
   },
+  {
+    id: 'arc_nova_damage', label: '★ Arc Nova – Damage Up', desc: '+30% burst and chain damage',
+    icon: 'Arc Nova',
+    apply: (w) => upgradeWeapon(w, 'Arc Nova', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Arc Nova') && weaponLevel(w, 'Arc Nova') < MAX_EVO_WEAPON_LEVEL,
+  },
+  {
+    id: 'arc_nova_rate', label: '★ Arc Nova – Rate Up', desc: '+18% Arc Nova fire rate',
+    icon: 'Arc Nova',
+    apply: (w) => upgradeWeapon(w, 'Arc Nova', 'rate'),
+    requires: (w) => w.some(x => x.name === 'Arc Nova') && weaponLevel(w, 'Arc Nova') < MAX_EVO_WEAPON_LEVEL,
+  },
+  {
+    id: 'event_horizon_damage', label: '★ Event Horizon – Damage Up', desc: '+30% pulse and arc damage',
+    icon: 'Event Horizon',
+    apply: (w) => upgradeWeapon(w, 'Event Horizon', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Event Horizon') && weaponLevel(w, 'Event Horizon') < MAX_EVO_WEAPON_LEVEL,
+  },
+  {
+    id: 'event_horizon_range', label: '★ Event Horizon – Range Up', desc: '+30px pull field range',
+    icon: 'Event Horizon',
+    apply: (w) => upgradeWeapon(w, 'Event Horizon', 'range'),
+    requires: (w) => w.some(x => x.name === 'Event Horizon') && weaponLevel(w, 'Event Horizon') < MAX_EVO_WEAPON_LEVEL,
+  },
+  {
+    id: 'frost_barrage_damage', label: '★ Frost Barrage – Damage Up', desc: '+30% frost missile damage',
+    icon: 'Frost Barrage',
+    apply: (w) => upgradeWeapon(w, 'Frost Barrage', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Frost Barrage') && weaponLevel(w, 'Frost Barrage') < MAX_EVO_WEAPON_LEVEL,
+  },
+  {
+    id: 'frost_barrage_rate', label: '★ Frost Barrage – Rate Up', desc: '+18% frost missile fire rate',
+    icon: 'Frost Barrage',
+    apply: (w) => upgradeWeapon(w, 'Frost Barrage', 'rate'),
+    requires: (w) => w.some(x => x.name === 'Frost Barrage') && weaponLevel(w, 'Frost Barrage') < MAX_EVO_WEAPON_LEVEL,
+  },
   // ── Generic powerups ───────────────────────────────────────────────────────
   {
     id: 'gen_atk_speed', label: '⚡ Systems Overclock', desc: 'All weapons fire 15% faster',
@@ -529,7 +611,10 @@ const UPGRADE_POOL: Upgrade[] = [
     id: 'add_gravity_well', label: '🌀 Unlock Gravity Well', desc: 'New weapon: pulls & detonates',
     icon: 'Gravity Well',
     apply: (_w, add) => add('Gravity Well'),
-    requires: (w) => !w.some(x => x.name === 'Gravity Well') && w.length < MAX_WEAPON_SLOTS,
+    requires: (w) =>
+      !w.some(x => x.name === 'Gravity Well') &&
+      !w.some(x => x.name === 'Event Horizon') &&
+      w.length < MAX_WEAPON_SLOTS,
   },
   {
     id: 'gravity_well_damage', label: '🌀 Gravity Well – Damage Up', desc: '+35% detonation damage',

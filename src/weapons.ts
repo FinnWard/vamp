@@ -14,7 +14,7 @@
 // by simple for-loops; no type-specific dispatch is needed because the interface
 // is uniform.
 //
-// Base weapons (8)
+// Base weapons (9)
 // ─────────────────
 //   Laser (MagicBolt)        — fast single-target bolt, pierce upgrades
 //   Plasma Whip (Whip)       — melee arc sweep, facing nearest enemy
@@ -24,8 +24,9 @@
 //   Missile Barrage          — homing explosive missiles, salvo of N
 //   Pulse Cannon             — N-directional simultaneous burst fire
 //   Cryo Beam                — continuous ray to nearest enemy, slows them
+//   Gravity Well             — pull field that collapses into a detonation
 //
-// Evolution weapons (6) — unlocked by merging two base weapons at required levels
+// Evolution weapons (9) — unlocked by merging two base weapons at required levels
 // ──────────────────────────────────────────────────────────────────────────────
 //   Beam Lash      = Laser lv3 + Plasma Whip lv2  → arc + piercing bolt
 //   Dark Matter    = Laser lv3 + Plasma Bomb lv2  → slow singularity + big explosion
@@ -33,6 +34,9 @@
 //   Solar Flare    = Laser lv2 + Pulse Cannon lv2 → 8-way piercing solar bolts
 //   Quantum Torpedo= Missile Barrage lv2 + Plasma Bomb lv2 → giant homing bomb
 //   Glacial Storm  = Cryo Beam lv2 + Force Field lv2 → freeze field + cryo pulses
+//   Arc Nova       = Ion Chain lv2 + Pulse Cannon lv2 → burst fire + chain lightning
+//   Event Horizon  = Ion Chain lv3 + Gravity Well lv2 → pull field + arc surges
+//   Frost Barrage  = Missile Barrage lv2 + Cryo Beam lv2 → homing frost missiles
 //
 // Visual helpers (private to this module)
 // ─────────────────────────────────────────
@@ -1033,6 +1037,297 @@ export class GlacialStorm implements Weapon {
   }
 }
 
+// ─── Evolution: Arc Nova (Ion Chain lv2 + Pulse Cannon lv2) ────────────────────
+
+export class ArcNova implements Weapon {
+  readonly name = 'Arc Nova'; readonly isEvolution = true; level = 1;
+  private cooldown = 1.1; private damage = 34; private speed = 360;
+  private directions = 6; private chains = 3;
+  totalDamageDealt = 0;
+  private timer = 0; private flashes: LightningFlash[] = [];
+  private readonly color = '#b388ff';
+
+  getStats(): string { return `DMG:${this.damage} ${this.directions}-way +${this.chains} chains`; }
+
+  upgrade(stat: 'damage' | 'rate'): void {
+    if (stat === 'damage') { this.damage = Math.round(this.damage * 1.3); this.level++; }
+    else if (stat === 'rate') { this.cooldown = Math.max(0.45, this.cooldown * 0.82); this.level++; }
+  }
+
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult;
+    this.damage = Math.round(this.damage * damageMult);
+  }
+
+  update(dt: number, player: Player, enemies: Enemy[], pool: ProjectilePool): void {
+    this.timer += dt;
+    for (const f of this.flashes) f.update(dt);
+    this.flashes = this.flashes.filter(f => !f.done);
+    if (this.timer < this.cooldown) return;
+    this.timer = 0;
+
+    for (let i = 0; i < this.directions; i++) {
+      const angle = (i / this.directions) * Math.PI * 2;
+      pool.spawn(player.x, player.y, Math.cos(angle) * this.speed, Math.sin(angle) * this.speed,
+        this.damage, 8, 2, this.color);
+    }
+
+    const targets = enemies
+      .filter(e => e.alive)
+      .sort((a, b) =>
+        ((a.x - player.x) ** 2 + (a.y - player.y) ** 2) - ((b.x - player.x) ** 2 + (b.y - player.y) ** 2))
+      .slice(0, this.chains);
+    if (!targets.length) return;
+
+    const chainDamage = Math.round(this.damage * 0.75);
+    const segs: LightningSegment[] = [];
+    let prevX = player.x;
+    let prevY = player.y;
+    for (const t of targets) {
+      t.takeDamage(chainDamage);
+      this.totalDamageDealt += chainDamage;
+      segs.push({ x1: prevX, y1: prevY, x2: t.x, y2: t.y });
+      prevX = t.x;
+      prevY = t.y;
+    }
+    this.flashes.push(new LightningFlash(segs));
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, _player: Player): void {
+    for (const f of this.flashes) f.draw(ctx, camera);
+  }
+}
+
+// ─── Evolution: Event Horizon (Ion Chain lv3 + Gravity Well lv2) ───────────────
+
+export class EventHorizon implements Weapon {
+  readonly name = 'Event Horizon'; readonly isEvolution = true; level = 1;
+  private pulseCooldown = 1.0; private chainCooldown = 0.55;
+  private damage = 42; private range = 180;
+  totalDamageDealt = 0;
+  private pulseTimer = 0; private chainTimer = 0;
+  private pulseEffects: ExplosionEffect[] = []; private flashes: LightningFlash[] = [];
+
+  getStats(): string { return `DMG:${this.damage} Pull:${this.range}px Arc field`; }
+
+  upgrade(stat: 'damage' | 'range'): void {
+    if (stat === 'damage') { this.damage = Math.round(this.damage * 1.3); this.level++; }
+    else if (stat === 'range') { this.range += 30; this.level++; }
+  }
+
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.pulseCooldown *= speedMult;
+    this.chainCooldown *= speedMult;
+    this.damage = Math.round(this.damage * damageMult);
+  }
+
+  update(dt: number, player: Player, enemies: Enemy[], _pool: ProjectilePool): void {
+    this.pulseTimer += dt;
+    this.chainTimer += dt;
+    for (const fx of this.pulseEffects) fx.update(dt);
+    for (const f of this.flashes) f.update(dt);
+    this.pulseEffects = this.pulseEffects.filter(fx => !fx.done);
+    this.flashes = this.flashes.filter(f => !f.done);
+
+    const inRange: Enemy[] = [];
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const dx = player.x - e.x;
+      const dy = player.y - e.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist >= this.range + e.radius) continue;
+      inRange.push(e);
+      if (dist > 0) {
+        const pull = 160 * (1 - dist / this.range) * dt;
+        e.x += (dx / dist) * pull;
+        e.y += (dy / dist) * pull;
+      }
+    }
+
+    if (this.chainTimer >= this.chainCooldown && inRange.length) {
+      this.chainTimer = 0;
+      const chainDamage = Math.round(this.damage * 0.45);
+      const segs: LightningSegment[] = [];
+      let prevX = player.x;
+      let prevY = player.y;
+      for (const t of inRange
+        .slice()
+        .sort((a, b) =>
+          ((a.x - player.x) ** 2 + (a.y - player.y) ** 2) - ((b.x - player.x) ** 2 + (b.y - player.y) ** 2))
+        .slice(0, 4)) {
+        t.takeDamage(chainDamage);
+        this.totalDamageDealt += chainDamage;
+        segs.push({ x1: prevX, y1: prevY, x2: t.x, y2: t.y });
+        prevX = t.x;
+        prevY = t.y;
+      }
+      this.flashes.push(new LightningFlash(segs));
+    }
+
+    if (this.pulseTimer >= this.pulseCooldown) {
+      this.pulseTimer = 0;
+      for (const e of inRange) {
+        e.takeDamage(this.damage);
+        this.totalDamageDealt += this.damage;
+      }
+      this.pulseEffects.push(new ExplosionEffect(player.x, player.y, this.range, 0.45, '#ce93d8'));
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, player: Player): void {
+    const s = camera.worldToScreen(player.x, player.y);
+    ctx.save();
+    ctx.strokeStyle = '#ce93d8'; ctx.globalAlpha = 0.22; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(s.x, s.y, this.range, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    for (const fx of this.pulseEffects) fx.draw(ctx, camera);
+    for (const f of this.flashes) f.draw(ctx, camera);
+  }
+}
+
+// ─── FrostMissile helper ────────────────────────────────────────────────────────
+
+class FrostMissile {
+  alive = true;
+  private age = 0;
+  private readonly maxAge = 3.8;
+
+  constructor(
+    public x: number, public y: number,
+    private vx: number, private vy: number,
+    private damage: number,
+    readonly radius: number,
+    private explosionRadius: number,
+    private slowFactor: number,
+    private effects: ExplosionEffect[],
+    private onDamage?: (dmg: number) => void,
+  ) {}
+
+  update(dt: number, enemies: Enemy[], camX: number, camY: number): void {
+    this.age += dt;
+    if (this.age >= this.maxAge || Math.abs(this.x - camX) > 1600 || Math.abs(this.y - camY) > 1600) {
+      this.alive = false; return;
+    }
+    let nearest: Enemy | null = null;
+    let bestDist = Infinity;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const d = (e.x - this.x) ** 2 + (e.y - this.y) ** 2;
+      if (d < bestDist) { bestDist = d; nearest = e; }
+    }
+    if (nearest) {
+      const dx = nearest.x - this.x;
+      const dy = nearest.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const tx = (dx / dist) * 260;
+      const ty = (dy / dist) * 260;
+      const turnRate = 4.2;
+      this.vx += (tx - this.vx) * turnRate * dt;
+      this.vy += (ty - this.vy) * turnRate * dt;
+      const spd = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+      if (spd > 260) {
+        this.vx = (this.vx / spd) * 260;
+        this.vy = (this.vy / spd) * 260;
+      }
+    }
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      if (circlesOverlap(this.x, this.y, this.radius, e.x, e.y, e.radius)) { this.explode(enemies); return; }
+    }
+  }
+
+  explode(enemies: Enemy[]): void {
+    this.alive = false;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const dx = e.x - this.x;
+      const dy = e.y - this.y;
+      if (Math.sqrt(dx * dx + dy * dy) < this.explosionRadius + e.radius) {
+        e.takeDamage(this.damage);
+        e.slowMultiplier = Math.min(e.slowMultiplier, this.slowFactor);
+        this.onDamage?.(this.damage);
+      }
+    }
+    this.effects.push(new ExplosionEffect(this.x, this.y, this.explosionRadius, 0.5, '#80d8ff'));
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    if (!this.alive) return;
+    const s = camera.worldToScreen(this.x, this.y);
+    const angle = Math.atan2(this.vy, this.vx);
+    ctx.save();
+    ctx.translate(s.x, s.y); ctx.rotate(angle);
+    ctx.fillStyle = '#80d8ff'; ctx.shadowColor = '#e1f5fe'; ctx.shadowBlur = 12;
+    ctx.fillRect(-10, -3, 16, 6);
+    ctx.fillStyle = '#e1f5fe';
+    ctx.fillRect(-14, -2, 6, 4);
+    ctx.fillStyle = 'rgba(128,216,255,0.45)';
+    ctx.fillRect(-22, -3, 10, 6);
+    ctx.restore();
+  }
+}
+
+// ─── Evolution: Frost Barrage (Missile Barrage lv2 + Cryo Beam lv2) ────────────
+
+export class FrostBarrage implements Weapon {
+  readonly name = 'Frost Barrage'; readonly isEvolution = true; level = 1;
+  private cooldown = 1.9; private damage = 72; private count = 2;
+  private explosionRadius = 110; private slowFactor = 0.35;
+  totalDamageDealt = 0;
+  private timer = 0; private missiles: FrostMissile[] = []; private effects: ExplosionEffect[] = [];
+  private cameraRef: Camera | null = null;
+
+  getStats(): string { return `DMG:${this.damage} Blast:${this.explosionRadius}px x${this.count} freeze`; }
+
+  upgrade(stat: 'damage' | 'rate'): void {
+    if (stat === 'damage') { this.damage = Math.round(this.damage * 1.3); this.level++; }
+    else if (stat === 'rate') { this.cooldown = Math.max(0.8, this.cooldown * 0.82); this.level++; }
+  }
+
+  scaleStats(speedMult: number, damageMult: number): void {
+    this.cooldown *= speedMult;
+    this.damage = Math.round(this.damage * damageMult);
+  }
+
+  update(dt: number, player: Player, enemies: Enemy[], _pool: ProjectilePool): void {
+    this.timer += dt;
+    const camX = this.cameraRef?.x ?? 0;
+    const camY = this.cameraRef?.y ?? 0;
+    for (const m of this.missiles) m.update(dt, enemies, camX, camY);
+    for (const fx of this.effects) fx.update(dt);
+    this.missiles = this.missiles.filter(m => m.alive);
+    this.effects = this.effects.filter(fx => !fx.done);
+    if (this.timer < this.cooldown) return;
+    this.timer = 0;
+
+    const target = enemies
+      .filter(e => e.alive)
+      .sort((a, b) =>
+        ((a.x - player.x) ** 2 + (a.y - player.y) ** 2) - ((b.x - player.x) ** 2 + (b.y - player.y) ** 2))[0];
+    if (!target) return;
+
+    const baseAngle = Math.atan2(target.y - player.y, target.x - player.x);
+    for (let i = 0; i < this.count; i++) {
+      const spread = (i - (this.count - 1) / 2) * 0.28;
+      const angle = baseAngle + spread;
+      this.missiles.push(new FrostMissile(
+        player.x + Math.cos(angle) * 20, player.y + Math.sin(angle) * 20,
+        Math.cos(angle) * 190, Math.sin(angle) * 190,
+        this.damage, 9, this.explosionRadius, this.slowFactor, this.effects,
+        (dmg) => { this.totalDamageDealt += dmg; },
+      ));
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, _player: Player): void {
+    this.cameraRef = camera;
+    for (const m of this.missiles) m.draw(ctx, camera);
+    for (const fx of this.effects) fx.draw(ctx, camera);
+  }
+}
+
 // ─── Weapon: Gravity Well ─────────────────────────────────────────────────────
 // Creates a gravitational singularity at the player's position that pulls
 // nearby enemies inward for pullDuration seconds then detonates, dealing
@@ -1182,6 +1477,9 @@ export function createWeaponByName(name: string): AnyWeapon | null {
     case 'Solar Flare':     return new SolarFlare();
     case 'Quantum Torpedo': return new QuantumTorpedo();
     case 'Glacial Storm':   return new GlacialStorm();
+    case 'Arc Nova':        return new ArcNova();
+    case 'Event Horizon':   return new EventHorizon();
+    case 'Frost Barrage':   return new FrostBarrage();
     default:                return null;
   }
 }

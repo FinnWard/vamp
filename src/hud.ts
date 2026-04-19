@@ -455,12 +455,23 @@ export class HUD {
     }
 
     // ── Weapon icons (bottom-centre) ──────────────────────────────────────────
-    const iconW = Math.round(92 * s);  // total icon card width
-    const iconH = Math.round(36 * s);  // total icon card height
-    const iconGap = Math.round(6 * s); // gap between cards
-    const totalW = weapons.length * iconW + (weapons.length - 1) * iconGap;
-    let wx = Math.round((canvas.width - totalW) / 2); // starting X for first card
-    const iconY = canvas.height - pad - iconH;         // Y aligned to bottom
+    const minimapSize = Math.round(70 * s);
+    const compactWeapons = canvas.width < 760;
+    const iconW = Math.round((compactWeapons ? 78 : 92) * s);
+    const iconH = Math.round((compactWeapons ? 32 : 36) * s);
+    const iconGap = Math.round(6 * s);
+    const rowGap = Math.round(5 * s);
+    const weaponAreaLeft = pad;
+    const weaponAreaRight = canvas.width - pad - minimapSize - Math.round(10 * s);
+    const weaponAreaWidth = Math.max(iconW, weaponAreaRight - weaponAreaLeft);
+    const singleRowW = weapons.length * iconW + Math.max(0, weapons.length - 1) * iconGap;
+    const useTwoRows = weapons.length > 2 && singleRowW > weaponAreaWidth;
+    const columns = useTwoRows ? Math.min(2, weapons.length) : Math.max(1, weapons.length);
+    const rows = Math.ceil(Math.max(weapons.length, 1) / columns);
+    const gridW = columns * iconW + Math.max(0, columns - 1) * iconGap;
+    const gridH = rows * iconH + Math.max(0, rows - 1) * rowGap;
+    const startX = weaponAreaLeft + Math.round((weaponAreaWidth - gridW) / 2);
+    const startY = canvas.height - pad - gridH;
     const p = Math.max(1, Math.round(2 * s));        // pixels per sprite cell
     const spriteW = 8 * p;                            // total sprite width (8 cells)
     const spriteX = Math.round(3 * s);               // left padding inside icon
@@ -469,7 +480,11 @@ export class HUD {
     ctx.save();
     ctx.font = `${Math.round(6 * s)}px "Press Start 2P", monospace`;
     ctx.textAlign = 'left';
-    for (const w of weapons) {
+    weapons.forEach((w, index) => {
+      const col = useTwoRows ? index % columns : index;
+      const row = useTwoRows ? Math.floor(index / columns) : 0;
+      const wx = startX + col * (iconW + iconGap);
+      const iconY = startY + row * (iconH + rowGap);
       // Card background + border
       ctx.fillStyle = 'rgba(0,10,40,0.75)';
       ctx.fillRect(wx, iconY, iconW, iconH);
@@ -490,9 +505,7 @@ export class HUD {
       // Level indicator
       ctx.fillStyle = '#ffd740';
       ctx.fillText(`U ${Math.max(0, w.level - 1)}/${MAX_WEAPON_UPGRADES}`, wx + textX, iconY + Math.round(26 * s));
-
-      wx += iconW + iconGap; // advance to next card position
-    }
+    });
     ctx.restore();
 
     // ── Minimap (bottom-right) ────────────────────────────────────────────────

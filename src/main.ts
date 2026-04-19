@@ -287,13 +287,12 @@ function renderStageButtons(): void {
     const btn = document.createElement('button');
     btn.className = 'diff-btn';
     btn.disabled = !unlocked;
-    const statLine = `${stage.hp.toFixed(2)}x HP • ${stage.damage.toFixed(2)}x DMG • ${stage.spawnRate.toFixed(2)}x spawns`;
     const lockLine = unlocked
       ? 'UNLOCKED'
       : `LOCKED — Beat boss 3 in ${STAGES[index - 1]!.label}`;
     btn.innerHTML = `
       <span class="diff-name">${stage.label}</span>
-      <span class="diff-desc">${stage.blurb}<br>${statLine}</span>
+      <span class="diff-desc">${stage.blurb}</span>
       <span class="diff-lock">${lockLine}</span>
     `;
     if (unlocked) {
@@ -441,7 +440,7 @@ function showPause(): void {
       <div class="pause-weapon-name">${w.isEvolution ? '★ ' : ''}${w.name}</div>
       <div class="pause-weapon-level">Level ${w.level}${w.isEvolution ? '  [EVOLVED]' : ''} • Upgrades ${weaponUpgrades}/${MAX_WEAPON_UPGRADES}</div>
       <div class="pause-weapon-stats">${w.getStats()}</div>
-      <div class="pause-weapon-stats">FIELD PWR ${perf.fieldPower} • E-DPS ${perf.effectiveDps.toFixed(1)} • SHARE ${perf.damageSharePct}%</div>
+      <div class="pause-weapon-stats">E-DPS ${perf.effectiveDps.toFixed(1)}</div>
     `;
     pauseWeapons.appendChild(card);
   }
@@ -610,14 +609,26 @@ function render(): void {
     spawner.enemies, spawner.activeBoss,
   );
   if (stageUnlockBannerTimer > 0) {
+    const bannerScale = Math.max(1, Math.min(canvas.width / 480, 2));
+    const bannerFont = Math.round((canvas.width < 560 ? 7 : 8) * bannerScale);
+    const bannerY = spawner.activeBoss ? Math.round(50 * bannerScale) : Math.round(28 * bannerScale);
     ctx.save();
-    ctx.fillStyle = '#ffd740';
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.font = '16px "Press Start 2P", monospace';
+    ctx.textBaseline = 'middle';
+    ctx.font = `${bannerFont}px "Press Start 2P", monospace`;
+    const metrics = ctx.measureText(stageUnlockBanner);
+    const bannerW = Math.min(canvas.width - Math.round(24 * bannerScale), metrics.width + Math.round(24 * bannerScale));
+    const bannerH = Math.round(18 * bannerScale);
+    const bannerX = Math.round((canvas.width - bannerW) / 2);
+    ctx.fillStyle = 'rgba(8, 18, 48, 0.82)';
+    ctx.fillRect(bannerX, bannerY - Math.round(bannerH / 2), bannerW, bannerH);
+    ctx.strokeStyle = '#ffd740';
+    ctx.lineWidth = Math.max(1, Math.round(bannerScale));
+    ctx.strokeRect(bannerX, bannerY - Math.round(bannerH / 2), bannerW, bannerH);
+    ctx.fillStyle = '#ffd740';
     ctx.shadowColor = '#ffd740';
-    ctx.shadowBlur = 16;
-    ctx.fillText(stageUnlockBanner, canvas.width / 2, 64);
+    ctx.shadowBlur = 12;
+    ctx.fillText(stageUnlockBanner, canvas.width / 2, bannerY + 1);
     ctx.restore();
   }
 }

@@ -279,6 +279,7 @@ class FireOrb {
     readonly damage: number, readonly radius: number,
     readonly explosionRadius: number, readonly explosionDamage: number,
     private effects: ExplosionEffect[],
+    private onDamage?: (damage: number) => void,
   ) {}
 
   update(dt: number, enemies: Enemy[], camX: number, camY: number, limit: number): void {
@@ -295,7 +296,10 @@ class FireOrb {
     for (const e of enemies) {
       if (!e.alive) continue;
       const dx = e.x - this.x, dy = e.y - this.y;
-      if (Math.sqrt(dx * dx + dy * dy) < this.explosionRadius + e.radius) e.takeDamage(this.explosionDamage);
+      if (Math.sqrt(dx * dx + dy * dy) < this.explosionRadius + e.radius) {
+        e.takeDamage(this.explosionDamage);
+        this.onDamage?.(this.explosionDamage);
+      }
     }
     this.effects.push(new ExplosionEffect(this.x, this.y, this.explosionRadius, 0.5, '#00b0ff'));
   }
@@ -355,7 +359,8 @@ export class Fireball implements Weapon {
     const dx = nearest.x - player.x, dy = nearest.y - player.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     this.orbs.push(new FireOrb(player.x, player.y, (dx / dist) * this.speed, (dy / dist) * this.speed,
-      this.damage, this.orbRadius, this.explosionRadius, this.damage * 2, this.effects));
+      this.damage, this.orbRadius, this.explosionRadius, this.damage * 2, this.effects,
+      (damage) => { this.totalDamageDealt += damage; }));
   }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera, _player: Player): void {
@@ -467,6 +472,7 @@ export class ThunderStrike implements Weapon {
   private cooldown = 0.5; private damage = 55; private speed = 420;
   private range = 160; private arcAngle = Math.PI * 0.9;
   private readonly color = '#69ffdf';
+  totalDamageDealt = 0;
   private timer = 0; private lastAngle = 0;
   private swingTimer = 0; private swinging = false; private readonly swingDuration = 0.2;
   private flashes: LightningFlash[] = [];
@@ -504,7 +510,9 @@ export class ThunderStrike implements Weapon {
       const dx = nearest.x - player.x, dy = nearest.y - player.y;
       angle = Math.atan2(dy, dx);
       const dist = Math.sqrt(dx * dx + dy * dy);
-      pool.spawn(player.x, player.y, (dx / dist) * this.speed, (dy / dist) * this.speed, this.damage, 10, 3, this.color);
+      pool.spawn(player.x, player.y, (dx / dist) * this.speed, (dy / dist) * this.speed,
+        this.damage, 10, 3, this.color,
+        (damage) => { this.totalDamageDealt += damage; });
     }
     const segs: LightningSegment[] = [];
     for (const e of enemies) {
@@ -547,6 +555,7 @@ class VoidOrbProjectile {
   constructor(
     public x: number, public y: number, private vx: number, private vy: number,
     private damage: number, readonly radius: number, private effects: ExplosionEffect[],
+    private onDamage?: (damage: number) => void,
   ) {}
 
   update(dt: number, enemies: Enemy[]): void {
@@ -554,7 +563,7 @@ class VoidOrbProjectile {
     for (const e of enemies) {
       if (!e.alive || this.hitEnemies.has(e)) continue;
       if (circlesOverlap(this.x, this.y, this.radius, e.x, e.y, e.radius)) {
-        this.hitEnemies.add(e); e.takeDamage(this.damage);
+        this.hitEnemies.add(e); e.takeDamage(this.damage); this.onDamage?.(this.damage);
       }
     }
     if (this.age >= this.maxAge) this.explode(enemies);
@@ -565,7 +574,11 @@ class VoidOrbProjectile {
     for (const e of enemies) {
       if (!e.alive) continue;
       const dx = e.x - this.x, dy = e.y - this.y;
-      if (Math.sqrt(dx * dx + dy * dy) < blastR + e.radius) e.takeDamage(this.damage * 3);
+      if (Math.sqrt(dx * dx + dy * dy) < blastR + e.radius) {
+        const blastDamage = this.damage * 3;
+        e.takeDamage(blastDamage);
+        this.onDamage?.(blastDamage);
+      }
     }
     this.effects.push(new ExplosionEffect(this.x, this.y, blastR, 0.7, '#e040fb'));
   }
@@ -588,6 +601,7 @@ class VoidOrbProjectile {
 export class VoidOrb implements Weapon {
   readonly name = 'Dark Matter'; readonly isEvolution = true; level = 1;
   private cooldown = 3.5; private damage = 80; private speed = 75;
+  totalDamageDealt = 0;
   private timer = 0; private orbs: VoidOrbProjectile[] = []; private effects: ExplosionEffect[] = [];
 
   getStats(): string { return `DMG:${this.damage} AoE:x3 Rate:${(1 / this.cooldown).toFixed(1)}/s`; }
@@ -620,7 +634,8 @@ export class VoidOrb implements Weapon {
     const dx = nearest.x - player.x, dy = nearest.y - player.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     this.orbs.push(new VoidOrbProjectile(player.x, player.y, (dx / dist) * this.speed, (dy / dist) * this.speed,
-      this.damage, 28, this.effects));
+      this.damage, 28, this.effects,
+      (damage) => { this.totalDamageDealt += damage; }));
   }
 
   draw(ctx: CanvasRenderingContext2D, camera: Camera, _player: Player): void {
@@ -635,6 +650,7 @@ export class Inferno implements Weapon {
   readonly name = 'Nova Burst'; readonly isEvolution = true; level = 1;
   private auraCooldown = 0.9; private orbCooldown = 2.2;
   private damage = 40; private auraRange = 130;
+  totalDamageDealt = 0;
   private auraTimer = 0; private orbTimer = 0;
   private orbs: FireOrb[] = []; private effects: ExplosionEffect[] = [];
   private cameraRef: Camera | null = null;
@@ -665,7 +681,10 @@ export class Inferno implements Weapon {
       for (const e of enemies) {
         if (!e.alive) continue;
         const dx = e.x - player.x, dy = e.y - player.y;
-        if (Math.sqrt(dx * dx + dy * dy) < this.auraRange + e.radius) e.takeDamage(this.damage);
+        if (Math.sqrt(dx * dx + dy * dy) < this.auraRange + e.radius) {
+          e.takeDamage(this.damage);
+          this.totalDamageDealt += this.damage;
+        }
       }
       this.effects.push(new ExplosionEffect(player.x, player.y, this.auraRange, 0.35, '#00b0ff'));
     }
@@ -674,7 +693,8 @@ export class Inferno implements Weapon {
       for (let i = 0; i < 6; i++) {
         const angle = (i / 6) * Math.PI * 2;
         this.orbs.push(new FireOrb(player.x, player.y, Math.cos(angle) * 130, Math.sin(angle) * 130,
-          this.damage, 14, 70, this.damage * 1.5, this.effects));
+          this.damage, 14, 70, this.damage * 1.5, this.effects,
+          (damage) => { this.totalDamageDealt += damage; }));
       }
     }
   }
@@ -704,6 +724,7 @@ class HomingMissile {
     readonly radius: number,
     private explosionRadius: number,
     private effects: ExplosionEffect[],
+    private onDamage?: (damage: number) => void,
   ) {}
 
   update(dt: number, enemies: Enemy[], camX: number, camY: number): void {
@@ -740,7 +761,10 @@ class HomingMissile {
     for (const e of enemies) {
       if (!e.alive) continue;
       const dx = e.x - this.x, dy = e.y - this.y;
-      if (Math.sqrt(dx * dx + dy * dy) < this.explosionRadius + e.radius) e.takeDamage(this.damage);
+      if (Math.sqrt(dx * dx + dy * dy) < this.explosionRadius + e.radius) {
+        e.takeDamage(this.damage);
+        this.onDamage?.(this.damage);
+      }
     }
     this.effects.push(new ExplosionEffect(this.x, this.y, this.explosionRadius, 0.45, '#ff6d00'));
   }
@@ -798,6 +822,7 @@ export class MissileBarrage implements Weapon {
         player.x + Math.cos(base) * 20, player.y + Math.sin(base) * 20,
         Math.cos(base) * 200, Math.sin(base) * 200,
         this.damage, 8, this.explosionRadius, this.effects,
+        (damage) => { this.totalDamageDealt += damage; },
       ));
     }
   }
@@ -909,6 +934,7 @@ export class CryoBeam implements Weapon {
 export class SolarFlare implements Weapon {
   readonly name = 'Solar Flare'; readonly isEvolution = true; level = 1;
   private cooldown = 0.9; private damage = 40; private speed = 420; private directions = 8;
+  totalDamageDealt = 0;
   private timer = 0;
   private readonly color = '#ffea00';
 
@@ -930,7 +956,8 @@ export class SolarFlare implements Weapon {
     for (let i = 0; i < this.directions; i++) {
       const angle = (i / this.directions) * Math.PI * 2;
       pool.spawn(player.x, player.y, Math.cos(angle) * this.speed, Math.sin(angle) * this.speed,
-        this.damage, 9, 4, this.color);
+        this.damage, 9, 4, this.color,
+        (damage) => { this.totalDamageDealt += damage; });
     }
   }
 }
@@ -940,6 +967,7 @@ export class SolarFlare implements Weapon {
 export class QuantumTorpedo implements Weapon {
   readonly name = 'Quantum Torpedo'; readonly isEvolution = true; level = 1;
   private cooldown = 2.5; private damage = 100; private explosionRadius = 160;
+  totalDamageDealt = 0;
   private timer = 0; private missiles: HomingMissile[] = []; private effects: ExplosionEffect[] = [];
   private cameraRef: Camera | null = null;
 
@@ -970,6 +998,7 @@ export class QuantumTorpedo implements Weapon {
     this.missiles.push(new HomingMissile(
       player.x, player.y, Math.cos(angle) * 160, Math.sin(angle) * 160,
       this.damage, 18, this.explosionRadius, this.effects,
+      (damage) => { this.totalDamageDealt += damage; },
     ));
   }
 
@@ -1071,7 +1100,8 @@ export class ArcNova implements Weapon {
     for (let i = 0; i < this.directions; i++) {
       const angle = (i / this.directions) * Math.PI * 2;
       pool.spawn(player.x, player.y, Math.cos(angle) * this.speed, Math.sin(angle) * this.speed,
-        this.damage, 8, 2, this.color);
+        this.damage, 8, 2, this.color,
+        (damage) => { this.totalDamageDealt += damage; });
     }
 
     const targets = enemies

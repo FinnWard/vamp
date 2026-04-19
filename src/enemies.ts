@@ -70,9 +70,11 @@ const REPULSION_RADIUS = 60;
 const REPULSION_STRENGTH = 0.35;
 
 /** HP multiplier added linearly per minute of real-time elapsed. */
-const HP_SCALE_LINEAR_PER_MIN = 0.25;
+const HP_SCALE_LINEAR_PER_MIN = 0.18;
 /** HP multiplier applied multiplicatively per minute of real-time elapsed. */
-const HP_SCALE_MULT_PER_MIN = 1.04;
+const HP_SCALE_MULT_PER_MIN = 1.03;
+/** Bosses inherit only part of the shared HP bonus so they stay threatening without dragging. */
+const BOSS_HP_SCALE_BONUS_FACTOR = 0.75;
 
 /** Seconds between boss spawns. */
 const BOSS_SPAWN_INTERVAL = 120;
@@ -869,12 +871,16 @@ export class EnemySpawner {
    * Combined HP multiplier used when constructing new enemies.
    * Blends a linear ramp (steady early-game growth) with a per-minute
    * multiplicative factor (compounding late-game difficulty).
+   * Bosses keep the same shape but inherit only part of the bonus HP so
+   * their time-to-kill does not run away as fast as regular scaling.
    */
-  private hpScale(): number {
+  private hpScale(type: EnemyType = 'grunt'): number {
     const mins = this.elapsed / 60;
     const linear = 1 + mins * HP_SCALE_LINEAR_PER_MIN;
     const mult   = Math.pow(HP_SCALE_MULT_PER_MIN, mins);
-    return linear * mult;
+    const scale = linear * mult;
+    if (type !== 'boss') return scale;
+    return 1 + (scale - 1) * BOSS_HP_SCALE_BONUS_FACTOR;
   }
 
   /**
@@ -944,7 +950,7 @@ export class EnemySpawner {
       this.bossTimer = 0;
       const bossSide = Math.floor(Math.random() * 4);
       const pos = this.spawnPosition(player, bossSide);
-      this.enemies.push(new Enemy(pos.x, pos.y, 'boss', this.hpScale()));
+      this.enemies.push(new Enemy(pos.x, pos.y, 'boss', this.hpScale('boss')));
       bossSpawned = true;
     }
 

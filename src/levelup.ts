@@ -54,6 +54,44 @@ export const MAX_WEAPON_SLOTS      = 4;                           // player can 
 export const MAX_GENERIC_UPGRADES  = 3;                           // each generic powerup can stack at most 3 times
 const LEVEL_UP_CHOICE_COUNT        = 4;
 
+export interface LogbookWeaponEntry {
+  name: string;
+  desc: string;
+}
+
+export interface LogbookMergeEntry {
+  result: string;
+  desc: string;
+  ingredients: Array<{ name: string; level: number }>;
+}
+
+export const LOGBOOK_WEAPONS: LogbookWeaponEntry[] = [
+  { name: 'Laser',           desc: 'Straight-shot DPS with fast upgrade scaling.' },
+  { name: 'Plasma Whip',     desc: 'Wide close-range sweep for crowd control.' },
+  { name: 'Plasma Bomb',     desc: 'Slow explosive orb for heavy splash hits.' },
+  { name: 'Ion Chain',       desc: 'Chain lightning that thrives on packed groups.' },
+  { name: 'Force Field',     desc: 'Persistent ring damage around the ship.' },
+  { name: 'Missile Barrage', desc: 'Tracking explosives that pressure priority targets.' },
+  { name: 'Pulse Cannon',    desc: 'Radial burst fire for all-angle coverage.' },
+  { name: 'Cryo Beam',       desc: 'Piercing freeze beam that slows enemies down.' },
+  { name: 'Gravity Well',    desc: 'Pull field that bunches enemies before detonating.' },
+];
+
+export const LOGBOOK_MERGES: LogbookMergeEntry[] = [
+  { result: 'Beam Lash',      desc: 'Simultaneous bolt and arc pressure.',                  ingredients: [{ name: 'Laser', level: 3 }, { name: 'Plasma Whip', level: 2 }] },
+  { result: 'Dark Matter',    desc: 'Massive piercing singularity burst.',                  ingredients: [{ name: 'Laser', level: 3 }, { name: 'Plasma Bomb', level: 2 }] },
+  { result: 'Nova Burst',     desc: 'Wide aura plus outward bomb burst.',                   ingredients: [{ name: 'Force Field', level: 2 }, { name: 'Plasma Bomb', level: 3 }] },
+  { result: 'Solar Flare',    desc: 'Piercing solar burst in all directions.',              ingredients: [{ name: 'Laser', level: 2 }, { name: 'Pulse Cannon', level: 2 }] },
+  { result: 'Quantum Torpedo',desc: 'Oversized homing bomb for boss and elite kills.',      ingredients: [{ name: 'Missile Barrage', level: 2 }, { name: 'Plasma Bomb', level: 2 }] },
+  { result: 'Glacial Storm',  desc: 'Freeze field with repeating cryo pulses.',             ingredients: [{ name: 'Cryo Beam', level: 2 }, { name: 'Force Field', level: 2 }] },
+  { result: 'Arc Nova',       desc: 'Pulse burst backed by chain lightning arcs.',          ingredients: [{ name: 'Ion Chain', level: 2 }, { name: 'Pulse Cannon', level: 2 }] },
+  { result: 'Event Horizon',  desc: 'Pull field with repeated arc surges.',                 ingredients: [{ name: 'Ion Chain', level: 3 }, { name: 'Gravity Well', level: 2 }] },
+  { result: 'Frost Barrage',  desc: 'Homing missiles that freeze on impact.',               ingredients: [{ name: 'Missile Barrage', level: 2 }, { name: 'Cryo Beam', level: 2 }] },
+  { result: 'Cryo Lash',      desc: 'Freezing sweep arc for close-range control.',          ingredients: [{ name: 'Plasma Whip', level: 2 }, { name: 'Cryo Beam', level: 2 }] },
+  { result: 'Aegis Array',    desc: 'Force pulse aura plus radial burst fire.',             ingredients: [{ name: 'Force Field', level: 2 }, { name: 'Pulse Cannon', level: 2 }] },
+  { result: 'Cataclysm Core', desc: 'Remote pull-core that ends in a heavy blast.',         ingredients: [{ name: 'Gravity Well', level: 2 }, { name: 'Plasma Bomb', level: 2 }] },
+];
+
 /**
  * Returns the XP required to reach the given level.
  * For levels within the hand-tuned table, returns the table value directly.

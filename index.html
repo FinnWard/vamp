@@ -41,6 +41,10 @@
       display: none;
     }
 
+    .hidden {
+      display: none !important;
+    }
+
     /* ── Title Screen ──────────────────────────────────────────── */
     #titleOverlay {
       gap: 22px;
@@ -360,6 +364,7 @@
       .card-desc         { font-size: 0.4rem; }
 
       #pauseOverlay h2   { font-size: 0.85rem; }
+      .pause-tab-btn     { font-size: 0.42rem; padding: 8px 14px; }
       #pauseStats        { font-size: 0.45rem; gap: 16px; flex-wrap: wrap; justify-content: center; }
       #pauseStats .stat-val { font-size: 0.7rem; }
       #pauseWeapons      { max-width: 100%; padding: 0 8px; }
@@ -367,6 +372,11 @@
       .pause-weapon-name { font-size: 0.45rem; }
       .pause-weapon-level { font-size: 0.4rem; }
       .pause-weapon-stats { font-size: 0.38rem; }
+      .pause-logbook-grid { grid-template-columns: 1fr; }
+      .pause-logbook-name { font-size: 0.42rem; }
+      .pause-logbook-desc,
+      .pause-logbook-recipe,
+      .pause-logbook-status { font-size: 0.34rem; }
       .pause-powerup-item { width: 72px; padding: 6px 8px; }
       .pause-powerup-name { font-size: 0.28rem; }
       #resumeBtn         { font-size: 0.55rem; padding: 10px 24px; }
@@ -387,6 +397,40 @@
       font-size: 1.2rem;
       text-shadow: 0 0 16px #00e5ff88;
       letter-spacing: 4px;
+    }
+
+    .pause-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .pause-tab-btn {
+      padding: 10px 18px;
+      background: #020818;
+      color: #80cbc4;
+      border: 2px solid #0d47a1;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.5rem;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: background 0.1s, border-color 0.1s, color 0.1s;
+    }
+
+    .pause-tab-btn.active,
+    .pause-tab-btn:hover {
+      background: #081635;
+      border-color: #00e5ff;
+      color: #e0f7fa;
+    }
+
+    .pause-panel {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
     }
 
     #pauseStats {
@@ -443,6 +487,87 @@
       color: #80cbc4;
       font-size: 0.45rem;
       line-height: 1.8;
+    }
+
+    #pauseLogbook {
+      max-width: 860px;
+      padding: 0 8px;
+    }
+
+    .pause-logbook-section {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .pause-logbook-heading {
+      color: #4dd0e1;
+      font-size: 0.58rem;
+      letter-spacing: 3px;
+      text-align: center;
+    }
+
+    .pause-logbook-grid {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .pause-logbook-card {
+      background: #020818;
+      border: 2px solid #0d47a1;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 154px;
+    }
+
+    .pause-logbook-card.current {
+      border-color: #00e5ff;
+      box-shadow: 0 0 14px #00e5ff22;
+    }
+
+    .pause-logbook-card.ready {
+      border-color: #ffd740;
+    }
+
+    .pause-logbook-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .pause-logbook-sprite {
+      width: 30px;
+      height: 30px;
+      image-rendering: pixelated;
+      flex: 0 0 auto;
+    }
+
+    .pause-logbook-name {
+      color: #e0f7fa;
+      font-size: 0.48rem;
+      line-height: 1.6;
+    }
+
+    .pause-logbook-status {
+      color: #ffd740;
+      font-size: 0.34rem;
+      line-height: 1.6;
+    }
+
+    .pause-logbook-desc,
+    .pause-logbook-recipe {
+      color: #80cbc4;
+      font-size: 0.4rem;
+      line-height: 1.8;
+    }
+
+    .pause-logbook-recipe {
+      color: #b2ebf2;
     }
 
     #resumeBtn {
@@ -566,9 +691,16 @@
   <!-- Pause overlay -->
   <div id="pauseOverlay" class="overlay hidden">
     <h2 id="pauseTitle">⏸ PAUSED</h2>
-    <div id="pauseStats"></div>
-    <div id="pauseWeapons"></div>
-    <div id="pausePowerups"></div>
+    <div class="pause-tabs">
+      <button id="pauseRunTab" class="pause-tab-btn active">RUN</button>
+      <button id="pauseLogbookTab" class="pause-tab-btn">LOGBOOK</button>
+    </div>
+    <div id="pauseRunPanel" class="pause-panel">
+      <div id="pauseStats"></div>
+      <div id="pauseWeapons"></div>
+      <div id="pausePowerups"></div>
+    </div>
+    <div id="pauseLogbook" class="pause-panel hidden"></div>
     <button id="resumeBtn">RESUME</button>
   </div>
 

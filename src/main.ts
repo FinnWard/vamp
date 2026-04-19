@@ -39,7 +39,15 @@ import { EnemySpawner, damageEvents, setDoTChances, setDifficultyMultipliers, se
 import { ProjectilePool } from './projectiles';
 import { GemManager } from './gems';
 import { MagicBolt, createWeaponByName, type AnyWeapon, type Weapon } from './weapons';
-import { LevelUpManager, MAX_GENERIC_UPGRADES, MAX_WEAPON_UPGRADES, type Upgrade, type ApplyUpgradeFn } from './levelup';
+import {
+  LevelUpManager,
+  LOGBOOK_MERGES,
+  LOGBOOK_WEAPONS,
+  MAX_GENERIC_UPGRADES,
+  MAX_WEAPON_UPGRADES,
+  type Upgrade,
+  type ApplyUpgradeFn,
+} from './levelup';
 import { HUD, drawSpriteToCanvas } from './hud';
 import { AudioManager } from './audio';
 import { DamageNumberPool } from './damage-numbers';
@@ -90,6 +98,8 @@ function saveLastRun(data: LastRunData): void {
 // ─── GameState ────────────────────────────────────────────────────────────────
 type GameState = 'title' | 'difficulty' | 'playing' | 'levelup' | 'gameover' | 'paused';
 let state: GameState = 'title';
+type PauseView = 'run' | 'logbook';
+let pauseView: PauseView = 'run';
 
 // ─── Stage progression ────────────────────────────────────────────────────────
 interface StageConfig {
@@ -240,6 +250,10 @@ const gameOverOverlay   = document.getElementById('gameOverOverlay')!;
 const gameOverStats     = document.getElementById('gameOverStats')!;
 const restartBtn        = document.getElementById('restartBtn')!;
 const pauseOverlay      = document.getElementById('pauseOverlay')!;
+const pauseRunTab       = document.getElementById('pauseRunTab') as HTMLButtonElement;
+const pauseLogbookTab   = document.getElementById('pauseLogbookTab') as HTMLButtonElement;
+const pauseRunPanel     = document.getElementById('pauseRunPanel')!;
+const pauseLogbook      = document.getElementById('pauseLogbook')!;
 const pauseStats        = document.getElementById('pauseStats')!;
 const pauseWeapons      = document.getElementById('pauseWeapons')!;
 const pausePowerups     = document.getElementById('pausePowerups')!;
@@ -414,10 +428,95 @@ restartBtn.addEventListener('click', () => {
 });
 
 // ─── Pause UI ─────────────────────────────────────────────────────────────────
+function setPauseView(view: PauseView): void {
+  pauseView = view;
+  pauseRunPanel.classList.toggle('hidden', view !== 'run');
+  pauseLogbook.classList.toggle('hidden', view !== 'logbook');
+  pauseRunTab.classList.toggle('active', view === 'run');
+  pauseLogbookTab.classList.toggle('active', view === 'logbook');
+}
+
+function createPauseSprite(key: string, className: string): HTMLCanvasElement {
+  const spriteCanvas = document.createElement('canvas');
+  spriteCanvas.width = 24;
+  spriteCanvas.height = 24;
+  spriteCanvas.className = className;
+  drawSpriteToCanvas(spriteCanvas, key);
+  return spriteCanvas;
+}
+
+function renderPauseLogbook(): void {
+  pauseLogbook.innerHTML = '';
+  const currentWeapons = new Map(weapons.map((weapon) => [weapon.name, weapon.level]));
+
+  const weaponSection = document.createElement('section');
+  weaponSection.className = 'pause-logbook-section';
+  weaponSection.innerHTML = '<div class="pause-logbook-heading">WEAPONS</div>';
+  const weaponGrid = document.createElement('div');
+  weaponGrid.className = 'pause-logbook-grid';
+  for (const entry of LOGBOOK_WEAPONS) {
+    const card = document.createElement('div');
+    const equipped = currentWeapons.has(entry.name);
+    card.className = `pause-logbook-card${equipped ? ' current' : ''}`;
+    const top = document.createElement('div');
+    top.className = 'pause-logbook-top';
+    top.appendChild(createPauseSprite(entry.name, 'pause-logbook-sprite'));
+    const titleWrap = document.createElement('div');
+    titleWrap.innerHTML = `
+      <div class="pause-logbook-name">${entry.name}</div>
+      <div class="pause-logbook-status">${equipped ? `EQUIPPED • LV ${currentWeapons.get(entry.name)}` : 'BASE WEAPON'}</div>
+    `;
+    top.appendChild(titleWrap);
+    const desc = document.createElement('div');
+    desc.className = 'pause-logbook-desc';
+    desc.textContent = entry.desc;
+    card.appendChild(top);
+    card.appendChild(desc);
+    weaponGrid.appendChild(card);
+  }
+  weaponSection.appendChild(weaponGrid);
+  pauseLogbook.appendChild(weaponSection);
+
+  const mergeSection = document.createElement('section');
+  mergeSection.className = 'pause-logbook-section';
+  mergeSection.innerHTML = '<div class="pause-logbook-heading">MERGES</div>';
+  const mergeGrid = document.createElement('div');
+  mergeGrid.className = 'pause-logbook-grid';
+  for (const entry of LOGBOOK_MERGES) {
+    const card = document.createElement('div');
+    const active = currentWeapons.has(entry.result);
+    const ready = !active && entry.ingredients.every((ingredient) => (currentWeapons.get(ingredient.name) ?? 0) >= ingredient.level);
+    card.className = `pause-logbook-card${active ? ' current' : ''}${ready ? ' ready' : ''}`;
+    const recipe = entry.ingredients.map((ingredient) => `${ingredient.name} LV ${ingredient.level}`).join(' + ');
+    const top = document.createElement('div');
+    top.className = 'pause-logbook-top';
+    top.appendChild(createPauseSprite(entry.result, 'pause-logbook-sprite'));
+    const titleWrap = document.createElement('div');
+    titleWrap.innerHTML = `
+      <div class="pause-logbook-name">★ ${entry.result}</div>
+      <div class="pause-logbook-status">${active ? 'ACTIVE NOW' : ready ? 'READY TO MERGE' : 'MERGE RECIPE'}</div>
+    `;
+    top.appendChild(titleWrap);
+    const desc = document.createElement('div');
+    desc.className = 'pause-logbook-desc';
+    desc.textContent = entry.desc;
+    const recipeEl = document.createElement('div');
+    recipeEl.className = 'pause-logbook-recipe';
+    recipeEl.textContent = `${recipe}  →  ${entry.result}`;
+    card.appendChild(top);
+    card.appendChild(desc);
+    card.appendChild(recipeEl);
+    mergeGrid.appendChild(card);
+  }
+  mergeSection.appendChild(mergeGrid);
+  pauseLogbook.appendChild(mergeSection);
+}
+
 function showPause(): void {
   state = 'paused';
   lastTime = null;
   menuBtn.textContent = '▶';
+  setPauseView('run');
 
   const mins  = Math.floor(elapsed / 60);
   const secs  = Math.floor(elapsed % 60).toString().padStart(2, '0');
@@ -467,11 +566,7 @@ function showPause(): void {
     for (const p of activePowerups) {
       const item = document.createElement('div');
       item.className = 'pause-powerup-item';
-      const spriteCanvas = document.createElement('canvas');
-      spriteCanvas.width  = 24;
-      spriteCanvas.height = 24;
-      spriteCanvas.className = 'pause-powerup-sprite';
-      drawSpriteToCanvas(spriteCanvas, p.key);
+      const spriteCanvas = createPauseSprite(p.key, 'pause-powerup-sprite');
       const nameEl = document.createElement('div');
       nameEl.className = 'pause-powerup-name';
       nameEl.textContent = p.label;
@@ -486,6 +581,7 @@ function showPause(): void {
     pausePowerups.appendChild(grid);
   }
 
+  renderPauseLogbook();
   pauseOverlay.classList.remove('hidden');
 }
 
@@ -499,6 +595,9 @@ menuBtn.addEventListener('click', () => {
   if (state === 'playing') showPause();
   else if (state === 'paused') hidePause();
 });
+
+pauseRunTab.addEventListener('click', () => setPauseView('run'));
+pauseLogbookTab.addEventListener('click', () => setPauseView('logbook'));
 
 resumeBtn.addEventListener('click', hidePause);
 

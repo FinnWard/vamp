@@ -9,6 +9,7 @@
 //   tank        — large, slow, high HP boss-like enemy
 //   charger     — patrols slowly then dashes at the player in bursts
 //   ranged      — maintains a preferred distance, strafes, and fires plasma bolts
+//   miner       — fragile mine-layer that kites and drops delayed proximity mines
 //   splitter    — on death splits into two splitterlets
 //   splitterlet — small fast child of the splitter
 //   boss        — massive elite enemy spawning every 120 s; has its own HP bar
@@ -45,7 +46,7 @@ import type { Player } from './player';
 // ─── Type definitions ─────────────────────────────────────────────────────────
 
 /** String literal union of all possible enemy variants. */
-type EnemyType = 'grunt' | 'fast' | 'tank' | 'charger' | 'ranged' | 'splitter' | 'splitterlet' | 'boss';
+type EnemyType = 'grunt' | 'fast' | 'tank' | 'charger' | 'ranged' | 'miner' | 'splitter' | 'splitterlet' | 'boss';
 
 /** Base stat block defined once per enemy type. */
 interface EnemyStats {
@@ -92,6 +93,16 @@ const RANGED_BOLT_DAMAGE_FACTOR = 0.6;
 const RANGED_BOLT_COOLDOWN_MIN = 2.0;
 /** Maximum seconds between ranged enemy shots. */
 const RANGED_BOLT_COOLDOWN_MAX = 2.8;
+/** Maximum number of active mines on the field at once. */
+const MAX_ACTIVE_MINES = 24;
+/** Seconds before a mine automatically begins its detonation warning. */
+const MINE_FUSE_TIME = 4.8;
+/** Distance at which the player proximity-triggers a mine's warning phase. */
+const MINE_TRIGGER_RADIUS = 82;
+/** Warning delay between trigger and detonation. */
+const MINE_WARNING_DURATION = 0.45;
+/** Explosion radius of a mine. */
+const MINE_BLAST_RADIUS = 78;
 
 /** Minimum angle (degrees) of the random spawn-direction jitter applied to each enemy. */
 const SPAWN_JITTER_MIN_DEG = 15;
@@ -157,6 +168,62 @@ class EnemyBolt {
   }
 }
 
+class EnemyMine {
+  alive = true;
+  private age = 0;
+  private warningTimer = 0;
+  private warning = false;
+
+  constructor(
+    public x: number,
+    public y: number,
+    private damage: number,
+  ) {}
+
+  update(dt: number, player: Player): void {
+    if (!this.alive) return;
+    this.age += dt;
+    const dx = player.x - this.x;
+    const dy = player.y - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (!this.warning && (this.age >= MINE_FUSE_TIME || dist <= MINE_TRIGGER_RADIUS + player.radius)) {
+      this.warning = true;
+      this.warningTimer = MINE_WARNING_DURATION;
+    }
+    if (!this.warning) return;
+    this.warningTimer -= dt;
+    if (this.warningTimer > 0) return;
+    if (dist <= MINE_BLAST_RADIUS + player.radius) {
+      player.takeDamage(this.damage);
+    }
+    this.alive = false;
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    if (!this.alive) return;
+    const s = camera.worldToScreen(this.x, this.y);
+    const blink = this.warning ? (Math.sin(this.warningTimer * 38) > 0 ? 1 : 0.35) : 1;
+    ctx.save();
+    ctx.globalAlpha = blink;
+    ctx.fillStyle = '#6d4c41';
+    ctx.shadowColor = this.warning ? '#ff5252' : '#ffab40';
+    ctx.shadowBlur = this.warning ? 18 : 10;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = this.warning ? '#ff5252' : '#ffd180';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = this.warning ? '#ff8a80' : 'rgba(255,171,64,0.45)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, this.warning ? MINE_BLAST_RADIUS : MINE_TRIGGER_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 // ─── Module-level DoT chance state (set from main.ts each frame) ──────────────
 
 let _burnChance   = 0;
@@ -202,6 +269,7 @@ const ENEMY_TYPES: Record<EnemyType, EnemyStats> = {
   tank:       { radius: 26, speed: 52,  hp: 280, damage: 60, xpValue: 6,  color: '#7b1fa2' },
   charger:    { radius: 15, speed: 85,  hp: 100, damage: 54, xpValue: 4,  color: '#f57f17' },
   ranged:     { radius: 13, speed: 75,  hp: 48,  damage: 30, xpValue: 4,  color: '#00897b' },
+  miner:      { radius: 12, speed: 68,  hp: 34,  damage: 24, xpValue: 4,  color: '#ffb300' },
   splitter:   { radius: 22, speed: 55,  hp: 180, damage: 44, xpValue: 6,  color: '#558b2f' },
   splitterlet:{ radius: 9,  speed: 120, hp: 32,  damage: 18, xpValue: 2,  color: '#8bc34a' },
   boss:       { radius: 42, speed: 40,  hp: 2400,damage: 90, xpValue: 40, color: '#b71c1c' },
@@ -278,12 +346,16 @@ export class Enemy {
   // ── Ranged-specific preferred distance ───────────────────────────────────
   /** The distance (world px) the ranged enemy tries to maintain from the player. */
   private static readonly RANGED_PREF_DIST = 220;
+  /** The distance (world px) the mine-layer tries to maintain from the player. */
+  private static readonly MINER_PREF_DIST = 245;
   /** Seconds until the ranged enemy can fire again. */
   private _rangedShotCooldown: number = 0;
   /** Brief visual flash after firing. */
   private _rangedShotFlash: number = 0;
   /** Active plasma bolts fired by this enemy. */
   private _rangedBolts: EnemyBolt[] = [];
+  /** Seconds until the mine-layer can deploy another mine. */
+  private _mineCooldown: number = 0;
 
   // ── DoT state ─────────────────────────────────────────────────────────────
   /** Remaining seconds of burn damage. 0 = not burning. */
@@ -333,6 +405,8 @@ export class Enemy {
     }
     if (type === 'ranged') {
       this._rangedShotCooldown = 0.7 + Math.random() * 0.8;
+    } else if (type === 'miner') {
+      this._mineCooldown = 1.2 + Math.random() * 1.2;
     }
   }
 
@@ -382,7 +456,7 @@ export class Enemy {
    * player overlap and applies contact damage.  Contact damage is multiplied
    * by dt so it represents "damage per second" even though it's applied every frame.
    */
-  update(dt: number, player: Player, allEnemies: Enemy[]): void {
+  update(dt: number, player: Player, allEnemies: Enemy[], spawnMine?: (x: number, y: number, damage: number) => boolean): void {
     if (!this.alive) return;
 
     // ── DoT tick processing ──────────────────────────────────────────────────
@@ -424,6 +498,8 @@ export class Enemy {
       this._rangedShotCooldown -= dt;
       for (const bolt of this._rangedBolts) bolt.update(dt, player);
       this._rangedBolts = this._rangedBolts.filter(bolt => bolt.alive);
+    } else if (this.type === 'miner') {
+      this._mineCooldown -= dt;
     }
 
     // Direction vector toward the player (normalised)
@@ -475,6 +551,8 @@ export class Enemy {
       this._updateCharger(dt, ndx, ndy);
     } else if (this.type === 'ranged') {
       this._updateRanged(dt, player, dist, ndx, ndy);
+    } else if (this.type === 'miner') {
+      this._updateMiner(dt, player, dist, ndx, ndy, spawnMine);
     } else {
       // Standard homing movement (grunt, fast, tank, splitter, splitterlet, boss)
       const effectiveSpeed = Math.min(this.speed, MAX_ENEMY_SPEED) * this.slowMultiplier;
@@ -585,6 +663,56 @@ export class Enemy {
     this._rangedShotFlash = 0.2;
   }
 
+  private _updateMiner(
+    dt: number,
+    player: Player,
+    dist: number,
+    ndx: number,
+    ndy: number,
+    spawnMine?: (x: number, y: number, damage: number) => boolean,
+  ): void {
+    const pref = Enemy.MINER_PREF_DIST;
+    if (dist < pref - 35) {
+      const effectiveSpeed = Math.min(this.speed * 1.05, MAX_ENEMY_SPEED) * this.slowMultiplier;
+      this.x -= ndx * effectiveSpeed * dt;
+      this.y -= ndy * effectiveSpeed * dt;
+      this._dropMine(player, dist, spawnMine);
+      return;
+    }
+    if (dist > pref + 35) {
+      const effectiveSpeed = Math.min(this.speed * 0.9, MAX_ENEMY_SPEED) * this.slowMultiplier;
+      this.x += ndx * effectiveSpeed * dt;
+      this.y += ndy * effectiveSpeed * dt;
+      return;
+    }
+    const perpX = -ndy;
+    const perpY = ndx;
+    const effectiveSpeed = Math.min(this.speed * 0.5, MAX_ENEMY_SPEED) * this.slowMultiplier;
+    this.x += perpX * effectiveSpeed * dt;
+    this.y += perpY * effectiveSpeed * dt;
+    this._dropMine(player, dist, spawnMine);
+  }
+
+  private _dropMine(
+    player: Player,
+    dist: number,
+    spawnMine?: (x: number, y: number, damage: number) => boolean,
+  ): void {
+    if (!spawnMine || this._mineCooldown > 0 || dist > Enemy.MINER_PREF_DIST + 20) return;
+    const awayX = this.x - player.x;
+    const awayY = this.y - player.y;
+    const len = Math.sqrt(awayX * awayX + awayY * awayY);
+    const nx = len > 0 ? awayX / len : 0;
+    const ny = len > 0 ? awayY / len : 0;
+    const placed = spawnMine(
+      this.x + nx * 16,
+      this.y + ny * 16,
+      Math.max(10, this.damage * 1.4),
+    );
+    if (!placed) return;
+    this._mineCooldown = 3.0 + Math.random() * 1.3;
+  }
+
   // ── Rendering ──────────────────────────────────────────────────────────────
 
   /**
@@ -610,6 +738,8 @@ export class Enemy {
       this._drawCharger(ctx);
     } else if (this.type === 'ranged') {
       this._drawRanged(ctx);
+    } else if (this.type === 'miner') {
+      this._drawMiner(ctx);
     } else if (this.type === 'splitter') {
       this._drawSplitter(ctx);
     } else if (this.type === 'splitterlet') {
@@ -807,6 +937,22 @@ export class Enemy {
     ctx.fillRect(-2, 10, 4, 2);
   }
 
+  private _drawMiner(ctx: CanvasRenderingContext2D): void {
+    const shell = this.variant === 1 ? '#f57c00' : '#ffb300';
+    const body  = this.variant === 1 ? '#ff9800' : '#ffc107';
+    const core  = this._mineCooldown <= 0 ? '#fff176' : '#ffe082';
+    const dark  = this.variant === 1 ? '#e65100' : '#ff8f00';
+    ctx.fillStyle = shell;
+    ctx.fillRect(-8, -8, 16, 16);
+    ctx.fillStyle = dark;
+    ctx.fillRect(-10, -2, 20, 4);
+    ctx.fillRect(-2, -10, 4, 20);
+    ctx.fillStyle = body;
+    ctx.fillRect(-5, -5, 10, 10);
+    ctx.fillStyle = core;
+    ctx.fillRect(-2, -2, 4, 4);
+  }
+
   private _drawSplitter(ctx: CanvasRenderingContext2D): void {
     // Segmented green blob that looks like it could split
     const main  = this.variant === 1 ? '#33691e' : '#558b2f';
@@ -926,6 +1072,8 @@ export class EnemySpawner {
   /** All currently active (alive) enemies plus enemies that died this frame
    *  (dead ones are removed by collectDead()). */
   enemies: Enemy[] = [];
+  /** Active mine hazards laid by miner enemies. */
+  mines: EnemyMine[] = [];
 
   /** Total time elapsed since the game started (seconds). */
   elapsed: number = 0;
@@ -1001,6 +1149,7 @@ export class EnemySpawner {
   private pickType(): EnemyType {
     const roll = Math.random();
     if (_enemyStage >= 4 && this.elapsed > 120 && roll < 0.08) return 'ranged';
+    if (_enemyStage >= 4 && this.elapsed > 135 && roll < 0.14) return 'miner';
     if (_enemyStage >= 3 && this.elapsed > 90  && roll < 0.12) return 'splitter';
     if (_enemyStage >= 2 && this.elapsed > 60  && roll < 0.18) return 'charger';
     if (this.elapsed > 50  && roll < 0.28) return 'tank';
@@ -1053,6 +1202,8 @@ export class EnemySpawner {
     this.elapsed += dt;
     this.timer += dt;
     this.bossTimer += dt;
+    for (const mine of this.mines) mine.update(dt, player);
+    this.mines = this.mines.filter(mine => mine.alive);
 
     // ── Boss spawn ──────────────────────────────────────────────────────────
     let bossSpawned = false;
@@ -1083,7 +1234,7 @@ export class EnemySpawner {
 
     // Update all enemies (alive or freshly-dead this frame)
     for (const e of this.enemies) {
-      e.update(dt, player, this.enemies);
+      e.update(dt, player, this.enemies, (x, y, damage) => this.spawnMine(x, y, damage));
     }
 
     return bossSpawned;
@@ -1114,8 +1265,17 @@ export class EnemySpawner {
     return dead;
   }
 
+  private spawnMine(x: number, y: number, damage: number): boolean {
+    if (this.mines.length >= MAX_ACTIVE_MINES) return false;
+    this.mines.push(new EnemyMine(x, y, damage));
+    return true;
+  }
+
   /** Draws every enemy (alive or freshly-dead this frame). */
   draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    for (const mine of this.mines) {
+      mine.draw(ctx, camera);
+    }
     for (const e of this.enemies) {
       e.draw(ctx, camera);
     }

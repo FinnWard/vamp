@@ -106,7 +106,7 @@ const STAGES: StageConfig[] = [
   { id: 'stage1', label: 'STAGE 1: OUTSKIRTS',    blurb: 'Grunts, fast scouts, and tanks.',            hp: 1.00, damage: 1.00, spawnRate: 1.00, enemyStage: 1 },
   { id: 'stage2', label: 'STAGE 2: ASSAULT LINE', blurb: 'Adds chargers and denser pressure.',         hp: 1.12, damage: 1.08, spawnRate: 1.08, enemyStage: 2 },
   { id: 'stage3', label: 'STAGE 3: SPLIT HIVE',   blurb: 'Adds splitters and tougher swarm control.', hp: 1.24, damage: 1.16, spawnRate: 1.16, enemyStage: 3 },
-  { id: 'stage4', label: 'STAGE 4: NULL FRONT',   blurb: 'Adds ranged skirmishers and max complexity.', hp: 1.36, damage: 1.26, spawnRate: 1.24, enemyStage: 4 },
+  { id: 'stage4', label: 'STAGE 4: NULL FRONT',   blurb: 'Adds ranged skirmishers, mine layers, and max complexity.', hp: 1.36, damage: 1.26, spawnRate: 1.24, enemyStage: 4 },
 ] as const;
 
 const STAGE_UNLOCK_KEY = 'vamp_unlocked_stage';

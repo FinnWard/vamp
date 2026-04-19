@@ -124,6 +124,31 @@ function weaponLevel(weapons: AnyWeapon[], name: string): number {
   return weapons.find(w => w.name === name)?.level ?? 0;
 }
 
+function upgradeOfferWeight(upgrade: Upgrade): number {
+  if (!upgrade.id.startsWith('evo_')) return 1;
+  return 4;
+}
+
+function pickWeightedUpgrades(available: Upgrade[], count: number): Upgrade[] {
+  const pool = [...available];
+  const picks: Upgrade[] = [];
+  while (pool.length > 0 && picks.length < count) {
+    const totalWeight = pool.reduce((sum, upgrade) => sum + upgradeOfferWeight(upgrade), 0);
+    let roll = Math.random() * totalWeight;
+    let pickedIndex = 0;
+    for (let i = 0; i < pool.length; i++) {
+      roll -= upgradeOfferWeight(pool[i]!);
+      if (roll <= 0) {
+        pickedIndex = i;
+        break;
+      }
+    }
+    const [picked] = pool.splice(pickedIndex, 1);
+    if (picked) picks.push(picked);
+  }
+  return shuffle(picks);
+}
+
 const UPGRADE_POOL: Upgrade[] = [
   // ── Laser ──────────────────────────────────────────────────────────────────
   {
@@ -149,7 +174,11 @@ const UPGRADE_POOL: Upgrade[] = [
     id: 'add_whip', label: '⚡ Unlock Plasma Whip', desc: 'New weapon: sweeping plasma arc',
     icon: 'Plasma Whip',
     apply: (_w, add) => add('Plasma Whip'),
-    requires: (w) => !w.some(x => x.name === 'Plasma Whip') && !w.some(x => x.name === 'Beam Lash') && w.length < MAX_WEAPON_SLOTS,
+    requires: (w) =>
+      !w.some(x => x.name === 'Plasma Whip') &&
+      !w.some(x => x.name === 'Beam Lash') &&
+      !w.some(x => x.name === 'Cryo Lash') &&
+      w.length < MAX_WEAPON_SLOTS,
   },
   {
     id: 'whip_damage', label: '⚡ Plasma Whip – Damage Up', desc: '+30% whip damage',
@@ -168,7 +197,12 @@ const UPGRADE_POOL: Upgrade[] = [
     id: 'add_fireball', label: '💠 Unlock Plasma Bomb', desc: 'New weapon: slow explosive orb',
     icon: 'Plasma Bomb',
     apply: (_w, add) => add('Plasma Bomb'),
-    requires: (w) => !w.some(x => x.name === 'Plasma Bomb') && !w.some(x => x.name === 'Dark Matter') && !w.some(x => x.name === 'Nova Burst') && w.length < MAX_WEAPON_SLOTS,
+    requires: (w) =>
+      !w.some(x => x.name === 'Plasma Bomb') &&
+      !w.some(x => x.name === 'Dark Matter') &&
+      !w.some(x => x.name === 'Nova Burst') &&
+      !w.some(x => x.name === 'Cataclysm Core') &&
+      w.length < MAX_WEAPON_SLOTS,
   },
   {
     id: 'fireball_damage', label: '💠 Plasma Bomb – Damage Up', desc: '+35% bomb damage',
@@ -222,7 +256,11 @@ const UPGRADE_POOL: Upgrade[] = [
     id: 'add_aura', label: '🛡 Unlock Force Field', desc: 'New weapon: pulsing damage ring',
     icon: 'Force Field',
     apply: (_w, add) => add('Force Field'),
-    requires: (w) => !w.some(x => x.name === 'Force Field') && !w.some(x => x.name === 'Nova Burst') && w.length < MAX_WEAPON_SLOTS,
+    requires: (w) =>
+      !w.some(x => x.name === 'Force Field') &&
+      !w.some(x => x.name === 'Nova Burst') &&
+      !w.some(x => x.name === 'Aegis Array') &&
+      w.length < MAX_WEAPON_SLOTS,
   },
   {
     id: 'aura_damage', label: '🛡 Force Field – Damage Up', desc: '+30% field damage',
@@ -286,6 +324,36 @@ const UPGRADE_POOL: Upgrade[] = [
       weaponLevel(w, 'Force Field') >= 2 && weaponLevel(w, 'Plasma Bomb') >= 3 &&
       !w.some(x => x.name === 'Nova Burst'),
   },
+  {
+    id: 'evo_cryo_lash',
+    label: '⚡🧊 EVOLVE: Cryo Lash',
+    desc: 'Merge Plasma Whip lv2 + Cryo Beam lv2 → freezing sweep arc',
+    icon: 'Cryo Lash',
+    apply: (_w, add, _p, remove) => { remove('Plasma Whip'); remove('Cryo Beam'); add('Cryo Lash'); },
+    requires: (w) =>
+      weaponLevel(w, 'Plasma Whip') >= 2 && weaponLevel(w, 'Cryo Beam') >= 2 &&
+      !w.some(x => x.name === 'Cryo Lash'),
+  },
+  {
+    id: 'evo_aegis_array',
+    label: '🛡💛 EVOLVE: Aegis Array',
+    desc: 'Merge Force Field lv2 + Pulse Cannon lv2 → aura pulse plus burst fire',
+    icon: 'Aegis Array',
+    apply: (_w, add, _p, remove) => { remove('Force Field'); remove('Pulse Cannon'); add('Aegis Array'); },
+    requires: (w) =>
+      weaponLevel(w, 'Force Field') >= 2 && weaponLevel(w, 'Pulse Cannon') >= 2 &&
+      !w.some(x => x.name === 'Aegis Array'),
+  },
+  {
+    id: 'evo_cataclysm_core',
+    label: '🌀💠 EVOLVE: Cataclysm Core',
+    desc: 'Merge Gravity Well lv2 + Plasma Bomb lv2 → remote pull-core detonation',
+    icon: 'Cataclysm Core',
+    apply: (_w, add, _p, remove) => { remove('Gravity Well'); remove('Plasma Bomb'); add('Cataclysm Core'); },
+    requires: (w) =>
+      weaponLevel(w, 'Gravity Well') >= 2 && weaponLevel(w, 'Plasma Bomb') >= 2 &&
+      !w.some(x => x.name === 'Cataclysm Core'),
+  },
   // ── Missile Barrage ────────────────────────────────────────────────────────
   {
     id: 'add_missile', label: '🚀 Unlock Missile Barrage', desc: 'New weapon: homing explosive missiles',
@@ -324,6 +392,7 @@ const UPGRADE_POOL: Upgrade[] = [
       !w.some(x => x.name === 'Pulse Cannon') &&
       !w.some(x => x.name === 'Solar Flare') &&
       !w.some(x => x.name === 'Arc Nova') &&
+      !w.some(x => x.name === 'Aegis Array') &&
       w.length < MAX_WEAPON_SLOTS,
   },
   {
@@ -353,6 +422,7 @@ const UPGRADE_POOL: Upgrade[] = [
       !w.some(x => x.name === 'Cryo Beam') &&
       !w.some(x => x.name === 'Glacial Storm') &&
       !w.some(x => x.name === 'Frost Barrage') &&
+      !w.some(x => x.name === 'Cryo Lash') &&
       w.length < MAX_WEAPON_SLOTS,
   },
   {
@@ -543,6 +613,42 @@ const UPGRADE_POOL: Upgrade[] = [
     apply: (w) => upgradeWeapon(w, 'Frost Barrage', 'rate'),
     requires: (w) => w.some(x => x.name === 'Frost Barrage') && weaponLevel(w, 'Frost Barrage') < MAX_EVO_WEAPON_LEVEL,
   },
+  {
+    id: 'cryo_lash_damage', label: '★ Cryo Lash – Damage Up', desc: '+30% lash damage',
+    icon: 'Cryo Lash',
+    apply: (w) => upgradeWeapon(w, 'Cryo Lash', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Cryo Lash') && weaponLevel(w, 'Cryo Lash') < MAX_EVO_WEAPON_LEVEL,
+  },
+  {
+    id: 'cryo_lash_range', label: '★ Cryo Lash – Range Up', desc: '+30px lash range',
+    icon: 'Cryo Lash',
+    apply: (w) => upgradeWeapon(w, 'Cryo Lash', 'range'),
+    requires: (w) => w.some(x => x.name === 'Cryo Lash') && weaponLevel(w, 'Cryo Lash') < MAX_EVO_WEAPON_LEVEL,
+  },
+  {
+    id: 'aegis_array_damage', label: '★ Aegis Array – Damage Up', desc: '+30% pulse and burst damage',
+    icon: 'Aegis Array',
+    apply: (w) => upgradeWeapon(w, 'Aegis Array', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Aegis Array') && weaponLevel(w, 'Aegis Array') < MAX_EVO_WEAPON_LEVEL,
+  },
+  {
+    id: 'aegis_array_range', label: '★ Aegis Array – Range Up', desc: '+25px pulse field range',
+    icon: 'Aegis Array',
+    apply: (w) => upgradeWeapon(w, 'Aegis Array', 'range'),
+    requires: (w) => w.some(x => x.name === 'Aegis Array') && weaponLevel(w, 'Aegis Array') < MAX_EVO_WEAPON_LEVEL,
+  },
+  {
+    id: 'cataclysm_core_damage', label: '★ Cataclysm Core – Damage Up', desc: '+30% core detonation damage',
+    icon: 'Cataclysm Core',
+    apply: (w) => upgradeWeapon(w, 'Cataclysm Core', 'damage'),
+    requires: (w) => w.some(x => x.name === 'Cataclysm Core') && weaponLevel(w, 'Cataclysm Core') < MAX_EVO_WEAPON_LEVEL,
+  },
+  {
+    id: 'cataclysm_core_range', label: '★ Cataclysm Core – Range Up', desc: '+30px pull radius',
+    icon: 'Cataclysm Core',
+    apply: (w) => upgradeWeapon(w, 'Cataclysm Core', 'range'),
+    requires: (w) => w.some(x => x.name === 'Cataclysm Core') && weaponLevel(w, 'Cataclysm Core') < MAX_EVO_WEAPON_LEVEL,
+  },
   // ── Generic powerups ───────────────────────────────────────────────────────
   {
     id: 'gen_atk_speed', label: '⚡ Systems Overclock', desc: 'All weapons fire 15% faster',
@@ -616,6 +722,7 @@ const UPGRADE_POOL: Upgrade[] = [
     requires: (w) =>
       !w.some(x => x.name === 'Gravity Well') &&
       !w.some(x => x.name === 'Event Horizon') &&
+      !w.some(x => x.name === 'Cataclysm Core') &&
       w.length < MAX_WEAPON_SLOTS,
   },
   {
@@ -683,13 +790,13 @@ export class LevelUpManager {
   }
 
   /**
-   * Filters the UPGRADE_POOL to currently available upgrades, shuffles them,
-   * takes 4 (or fewer if not enough are available), and fires the onLevelUp
-   * callback so main.ts can display the upgrade cards.
+   * Filters the UPGRADE_POOL to currently available upgrades, then samples up to
+   * 4 offers without replacement. Evolution cards get extra weight so once the
+   * player has met a merge recipe, that card appears more reliably.
    */
   private triggerLevelUp(weapons: AnyWeapon[], addWeapon: AddWeaponFn, player: Player, removeWeapon: RemoveWeaponFn): void {
     const available = UPGRADE_POOL.filter(u => u.requires(weapons, player));
-    const choices = shuffle([...available]).slice(0, LEVEL_UP_CHOICE_COUNT);
+    const choices = pickWeightedUpgrades(available, LEVEL_UP_CHOICE_COUNT);
     if (this.onLevelUp) {
       this.onLevelUp(choices, (choice) => {
         choice.apply(weapons, addWeapon, player, removeWeapon);

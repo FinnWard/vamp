@@ -216,6 +216,36 @@ const WEAPON_SPRITE_GRIDS: Record<string, string[]> = {
     '.1.1.111',
     '1..1..11',
   ],
+  'Cryo Lash': [
+    '1.....11',
+    '.1...11.',
+    '..1.11..',
+    '111221..',
+    '..112211',
+    '..11.1..',
+    '.11...1.',
+    '11.....1',
+  ],
+  'Aegis Array': [
+    '1..1..1.',
+    '.122221.',
+    '12.11.21',
+    '11122111',
+    '11122111',
+    '12.11.21',
+    '.122221.',
+    '1..1..1.',
+  ],
+  'Cataclysm Core': [
+    '..1111..',
+    '.122221.',
+    '12.11.21',
+    '12122121',
+    '12122121',
+    '12.11.21',
+    '.122221.',
+    '..1111..',
+  ],
 };
 
 /**
@@ -242,6 +272,9 @@ const WEAPON_SPRITE_COLORS: Record<string, [string, string]> = {
   'Arc Nova':        ['#b388ff', '#e1bee7'],
   'Event Horizon':   ['#ce93d8', '#80d8ff'],
   'Frost Barrage':   ['#80d8ff', '#e1f5fe'],
+  'Cryo Lash':       ['#80d8ff', '#b2ebf2'],
+  'Aegis Array':     ['#90caf9', '#fff9c4'],
+  'Cataclysm Core':  ['#ff80ab', '#f8bbd0'],
 };
 
 // ─── Pixel sprite definitions for generic powerups (8×8 grid) ─────────────────

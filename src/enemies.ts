@@ -176,12 +176,18 @@ export function setDoTChances(burnChance: number, poisonChance: number): void {
 let _diffHpMult     = 1.0;
 let _diffDamageMult = 1.0;
 let _diffSpeedMult  = 1.0;
+let _enemyStage     = 1;
 
 /** Set enemy HP / damage / spawn-rate multipliers for the chosen difficulty. */
 export function setDifficultyMultipliers(hp: number, damage: number, speed: number): void {
   _diffHpMult     = hp;
   _diffDamageMult = damage;
   _diffSpeedMult  = speed;
+}
+
+/** Restricts which enemy archetypes can appear for the current stage. */
+export function setEnemyStage(stage: number): void {
+  _enemyStage = Math.max(1, Math.floor(stage));
 }
 
 // ─── Base stat table ──────────────────────────────────────────────────────────
@@ -994,9 +1000,9 @@ export class EnemySpawner {
    */
   private pickType(): EnemyType {
     const roll = Math.random();
-    if (this.elapsed > 120 && roll < 0.08) return 'ranged';
-    if (this.elapsed > 90  && roll < 0.12) return 'splitter';
-    if (this.elapsed > 60  && roll < 0.18) return 'charger';
+    if (_enemyStage >= 4 && this.elapsed > 120 && roll < 0.08) return 'ranged';
+    if (_enemyStage >= 3 && this.elapsed > 90  && roll < 0.12) return 'splitter';
+    if (_enemyStage >= 2 && this.elapsed > 60  && roll < 0.18) return 'charger';
     if (this.elapsed > 50  && roll < 0.28) return 'tank';
     if (this.elapsed > 12  && roll < 0.42) return 'fast';
     return 'grunt';

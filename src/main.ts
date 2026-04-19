@@ -35,7 +35,7 @@
 
 import { Camera } from './camera';
 import { Player } from './player';
-import { EnemySpawner, damageEvents, setDoTChances, setDifficultyMultipliers } from './enemies';
+import { EnemySpawner, damageEvents, setDoTChances, setDifficultyMultipliers, setEnemyStage } from './enemies';
 import { ProjectilePool } from './projectiles';
 import { GemManager } from './gems';
 import { MagicBolt, createWeaponByName, type AnyWeapon, type Weapon } from './weapons';
@@ -79,7 +79,7 @@ interface LastRunData {
   elapsed: number;
   kills: number;
   level: number;
-  difficulty: string;
+  stage: string;
   weapons: Array<{ name: string; damage: number }>;
 }
 
@@ -91,27 +91,57 @@ function saveLastRun(data: LastRunData): void {
 type GameState = 'title' | 'difficulty' | 'playing' | 'levelup' | 'gameover' | 'paused';
 let state: GameState = 'title';
 
-// ─── Difficulty ───────────────────────────────────────────────────────────────
-interface DifficultyConfig {
+// ─── Stage progression ────────────────────────────────────────────────────────
+interface StageConfig {
+  id: string;
   label: string;
+  blurb: string;
   hp: number;
   damage: number;
   spawnRate: number;
+  enemyStage: number;
 }
 
-const DIFFICULTIES: Record<string, DifficultyConfig> = {
-  easy:   { label: 'Easy',   hp: 0.75, damage: 0.75, spawnRate: 0.80 },
-  normal: { label: 'Normal', hp: 1.00, damage: 1.00, spawnRate: 1.00 },
-  hard:   { label: 'Hard',   hp: 1.40, damage: 1.30, spawnRate: 1.20 },
-  void:   { label: 'Void',   hp: 2.00, damage: 1.75, spawnRate: 1.50 },
-};
+const STAGES: StageConfig[] = [
+  { id: 'stage1', label: 'STAGE 1: OUTSKIRTS',    blurb: 'Grunts, fast scouts, and tanks.',            hp: 1.00, damage: 1.00, spawnRate: 1.00, enemyStage: 1 },
+  { id: 'stage2', label: 'STAGE 2: ASSAULT LINE', blurb: 'Adds chargers and denser pressure.',         hp: 1.12, damage: 1.08, spawnRate: 1.08, enemyStage: 2 },
+  { id: 'stage3', label: 'STAGE 3: SPLIT HIVE',   blurb: 'Adds splitters and tougher swarm control.', hp: 1.24, damage: 1.16, spawnRate: 1.16, enemyStage: 3 },
+  { id: 'stage4', label: 'STAGE 4: NULL FRONT',   blurb: 'Adds ranged skirmishers and max complexity.', hp: 1.36, damage: 1.26, spawnRate: 1.24, enemyStage: 4 },
+] as const;
 
-let currentDifficulty: string = 'normal';
+const STAGE_UNLOCK_KEY = 'vamp_unlocked_stage';
+
+function loadUnlockedStageCount(): number {
+  try {
+    const raw = parseInt(localStorage.getItem(STAGE_UNLOCK_KEY) ?? '1', 10) || 1;
+    return Math.min(STAGES.length, Math.max(1, raw));
+  } catch {
+    return 1;
+  }
+}
+
+function saveUnlockedStageCount(count: number): void {
+  try {
+    localStorage.setItem(STAGE_UNLOCK_KEY, String(Math.min(STAGES.length, Math.max(1, count))));
+  } catch {
+    // storage unavailable
+  }
+}
+
+function getStageById(stageId: string): StageConfig {
+  return STAGES.find(stage => stage.id === stageId) ?? STAGES[0]!;
+}
+
+let unlockedStageCount = loadUnlockedStageCount();
+let currentStageId: string = STAGES[0]!.id;
 
 // ─── Per-run mutable state ────────────────────────────────────────────────────
 let elapsed = 0;
 let kills   = 0;
 let lastTime: number | null = null;
+let bossesDefeated = 0;
+let stageUnlockBanner = '';
+let stageUnlockBannerTimer = 0;
 
 // ─── Game objects (re-created on soft restart) ────────────────────────────────
 let camera:   Camera;
@@ -167,9 +197,13 @@ function initGameObjects(): void {
   elapsed       = 0;
   kills         = 0;
   lastTime      = null;
+  bossesDefeated = 0;
+  stageUnlockBanner = '';
+  stageUnlockBannerTimer = 0;
 
-  const diff = DIFFICULTIES[currentDifficulty]!;
-  setDifficultyMultipliers(diff.hp, diff.damage, diff.spawnRate);
+  const stage = getStageById(currentStageId);
+  setDifficultyMultipliers(stage.hp, stage.damage, stage.spawnRate);
+  setEnemyStage(stage.enemyStage);
 
   levelMgr.onLevelUp = (choices: Upgrade[], applyFn: ApplyUpgradeFn) => {
     state = 'levelup';
@@ -198,6 +232,8 @@ function removeWeapon(name: string): void {
 // ─── HTML elements ────────────────────────────────────────────────────────────
 const titleOverlay      = document.getElementById('titleOverlay')!;
 const difficultyOverlay = document.getElementById('difficultyOverlay')!;
+const difficultyHint    = document.getElementById('difficultyHint')!;
+const diffBtns          = document.getElementById('diffBtns')!;
 const levelUpOverlay    = document.getElementById('levelUpOverlay')!;
 const upgradeCards      = document.getElementById('upgradeCards')!;
 const gameOverOverlay   = document.getElementById('gameOverOverlay')!;
@@ -234,18 +270,53 @@ document.getElementById('playBtn')!.addEventListener('click', () => {
 // ─── Difficulty Screen ────────────────────────────────────────────────────────
 function showDifficulty(): void {
   state = 'difficulty';
+  renderStageButtons();
   difficultyOverlay.classList.remove('hidden');
 }
 
-// Bind difficulty buttons
-document.querySelectorAll('.diff-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const diff = (btn as HTMLElement).dataset['difficulty'] ?? 'normal';
-    currentDifficulty = diff;
-    difficultyOverlay.classList.add('hidden');
-    startNewRun();
+function renderStageButtons(): void {
+  unlockedStageCount = loadUnlockedStageCount();
+  difficultyHint.textContent = unlockedStageCount < STAGES.length
+    ? `Beat the 3rd boss in a run to unlock ${STAGES[unlockedStageCount]!.label}.`
+    : 'All stages unlocked. Every stage still includes boss fights.';
+  diffBtns.innerHTML = '';
+
+  STAGES.forEach((stage, index) => {
+    const stageNumber = index + 1;
+    const unlocked = stageNumber <= unlockedStageCount;
+    const btn = document.createElement('button');
+    btn.className = 'diff-btn';
+    btn.disabled = !unlocked;
+    const statLine = `${stage.hp.toFixed(2)}x HP • ${stage.damage.toFixed(2)}x DMG • ${stage.spawnRate.toFixed(2)}x spawns`;
+    const lockLine = unlocked
+      ? 'UNLOCKED'
+      : `LOCKED — Beat boss 3 in ${STAGES[index - 1]!.label}`;
+    btn.innerHTML = `
+      <span class="diff-name">${stage.label}</span>
+      <span class="diff-desc">${stage.blurb}<br>${statLine}</span>
+      <span class="diff-lock">${lockLine}</span>
+    `;
+    if (unlocked) {
+      btn.addEventListener('click', () => {
+        currentStageId = stage.id;
+        difficultyOverlay.classList.add('hidden');
+        startNewRun();
+      });
+    }
+    diffBtns.appendChild(btn);
   });
-});
+}
+
+function maybeUnlockNextStage(): void {
+  if (bossesDefeated !== 3) return;
+  const currentIndex = STAGES.findIndex(stage => stage.id === currentStageId);
+  const nextUnlockedStage = currentIndex + 2;
+  if (nextUnlockedStage > STAGES.length || unlockedStageCount >= nextUnlockedStage) return;
+  unlockedStageCount = nextUnlockedStage;
+  saveUnlockedStageCount(unlockedStageCount);
+  stageUnlockBanner = `${STAGES[nextUnlockedStage - 1]!.label} UNLOCKED`;
+  stageUnlockBannerTimer = 4;
+}
 
 function startNewRun(): void {
   initGameObjects();
@@ -320,7 +391,7 @@ function showGameOver(): void {
     elapsed,
     kills,
     level: levelMgr.level,
-    difficulty: currentDifficulty,
+    stage: getStageById(currentStageId).label,
     weapons: wStats,
   });
 
@@ -330,7 +401,7 @@ function showGameOver(): void {
 
   gameOverStats.innerHTML = `
     <div class="stats-line">Survived: <b>${mins}:${secs}</b> &nbsp; Kills: <b>${kills}</b> &nbsp; Level: <b>${levelMgr.level}</b></div>
-    <div class="stats-line">Difficulty: <b>${DIFFICULTIES[currentDifficulty]!.label}</b> &nbsp; High Score: <b>${newHs}</b>${isNew ? ' 🏆 NEW!' : ''}</div>
+    <div class="stats-line">Stage: <b>${getStageById(currentStageId).label}</b> &nbsp; Bosses: <b>${bossesDefeated}</b> &nbsp; High Score: <b>${newHs}</b>${isNew ? ' 🏆 NEW!' : ''}</div>
     <div class="stats-weapons">${weaponRows}</div>
   `;
 
@@ -449,6 +520,7 @@ function update(dt: number): void {
   if (state !== 'playing') return;
 
   elapsed += dt;
+  stageUnlockBannerTimer = Math.max(0, stageUnlockBannerTimer - dt);
 
   // Keep DoT chances in sync with player upgrades
   setDoTChances(player.burnChance, player.poisonChance);
@@ -489,6 +561,8 @@ function update(dt: number): void {
     gems.spawnFromEnemy(e);
     if (e.isBoss) {
       audio.bossDeath();
+      bossesDefeated++;
+      maybeUnlockNextStage();
     } else {
       audio.enemyDeath();
     }
@@ -534,6 +608,17 @@ function render(): void {
     ctx, canvas, player, levelMgr, elapsed, kills, weapons as Weapon[],
     spawner.enemies, spawner.activeBoss,
   );
+  if (stageUnlockBannerTimer > 0) {
+    ctx.save();
+    ctx.fillStyle = '#ffd740';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.font = '16px "Press Start 2P", monospace';
+    ctx.shadowColor = '#ffd740';
+    ctx.shadowBlur = 16;
+    ctx.fillText(stageUnlockBanner, canvas.width / 2, 64);
+    ctx.restore();
+  }
 }
 
 // ─── Game Loop ────────────────────────────────────────────────────────────────

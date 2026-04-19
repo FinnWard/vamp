@@ -124,6 +124,35 @@ let levelMgr: LevelUpManager;
 let weapons:  AnyWeapon[];
 let damageNumbers: DamageNumberPool;
 
+interface WeaponPerformance {
+  weapon: Weapon;
+  damage: number;
+  activeSeconds: number;
+  effectiveDps: number;
+  damageSharePct: number;
+  fieldPower: number;
+}
+
+function getWeaponPerformance(weapons: Weapon[]): WeaponPerformance[] {
+  const metrics = weapons.map((weapon) => {
+    const damage = weapon.totalDamageDealt ?? 0;
+    const activeSeconds = Math.max(weapon.activeTimeSeconds ?? 0, 1);
+    return {
+      weapon,
+      damage,
+      activeSeconds,
+      effectiveDps: damage / activeSeconds,
+    };
+  });
+  const maxEffectiveDps = Math.max(0, ...metrics.map((entry) => entry.effectiveDps));
+  const totalDamage = metrics.reduce((sum, entry) => sum + entry.damage, 0);
+  return metrics.map((entry) => ({
+    ...entry,
+    damageSharePct: totalDamage > 0 ? Math.round((entry.damage / totalDamage) * 100) : 0,
+    fieldPower: maxEffectiveDps > 0 ? Math.round((entry.effectiveDps / maxEffectiveDps) * 100) : 0,
+  })).sort((a, b) => b.fieldPower - a.fieldPower || b.effectiveDps - a.effectiveDps);
+}
+
 function initGameObjects(): void {
   camera        = new Camera(canvas);
   player        = new Player(canvas, camera);
@@ -134,6 +163,7 @@ function initGameObjects(): void {
   levelMgr      = new LevelUpManager();
   damageNumbers = new DamageNumberPool();
   weapons       = [new MagicBolt()];
+  weapons[0]!.activeTimeSeconds = 0;
   elapsed       = 0;
   kills         = 0;
   lastTime      = null;
@@ -153,6 +183,7 @@ function addWeapon(name: string): void {
   if (!weapons.some(w => w.name === name)) {
     const w = createWeaponByName(name);
     if (w) {
+      w.activeTimeSeconds = 0;
       w.scaleStats(player.attackSpeedMult, player.damageMult);
       weapons.push(w);
     }
@@ -278,10 +309,12 @@ function showGameOver(): void {
   const isNew = newHs > hs;
 
   // Build weapon damage stats
-  const wStats = weapons.map(w => ({
-    name:   w.name,
-    damage: w.totalDamageDealt ?? 0,
-  })).sort((a, b) => b.damage - a.damage);
+  const wStats = getWeaponPerformance(weapons).map((entry) => ({
+    name: entry.weapon.name,
+    damage: entry.damage,
+    effectiveDps: entry.effectiveDps,
+    fieldPower: entry.fieldPower,
+  }));
 
   saveLastRun({
     elapsed,
@@ -292,7 +325,7 @@ function showGameOver(): void {
   });
 
   const weaponRows = wStats
-    .map(w => `<div class="stats-weapon-row"><span>${w.name}</span><span>${w.damage.toLocaleString()} dmg</span></div>`)
+    .map(w => `<div class="stats-weapon-row"><span>${w.name}</span><span>${w.damage.toLocaleString()} dmg • ${w.effectiveDps.toFixed(1)} dps • PWR ${w.fieldPower}</span></div>`)
     .join('');
 
   gameOverStats.innerHTML = `
@@ -328,13 +361,15 @@ function showPause(): void {
   `;
 
   pauseWeapons.innerHTML = '';
-  for (const w of weapons) {
+  for (const perf of getWeaponPerformance(weapons)) {
+    const w = perf.weapon;
     const card = document.createElement('div');
     card.className = `pause-weapon-card${w.isEvolution ? ' evolution' : ''}`;
     card.innerHTML = `
       <div class="pause-weapon-name">${w.isEvolution ? '★ ' : ''}${w.name}</div>
       <div class="pause-weapon-level">Level ${w.level}${w.isEvolution ? '  [EVOLVED]' : ''}</div>
       <div class="pause-weapon-stats">${w.getStats()}</div>
+      <div class="pause-weapon-stats">FIELD PWR ${perf.fieldPower} • E-DPS ${perf.effectiveDps.toFixed(1)} • SHARE ${perf.damageSharePct}%</div>
     `;
     pauseWeapons.appendChild(card);
   }
@@ -427,6 +462,7 @@ function update(dt: number): void {
   }
 
   for (const w of weapons) {
+    w.activeTimeSeconds = (w.activeTimeSeconds ?? 0) + dt;
     w.update(dt, player, spawner.enemies, pool);
   }
 
@@ -516,4 +552,3 @@ function loop(timestamp: number): void {
 initGameObjects(); // pre-initialise so render() has valid references
 showTitle();
 requestAnimationFrame(loop);
-

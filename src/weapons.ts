@@ -74,6 +74,8 @@ export interface Weapon {
   scaleStats(speedMult: number, damageMult: number): void;
   /** Cumulative damage dealt this run (tracked per weapon for post-run stats). */
   totalDamageDealt?: number;
+  /** Seconds this weapon has been active in the current run. */
+  activeTimeSeconds?: number;
 }
 
 // ─── Visual: explosion ring effect ───────────────────────────────────────────

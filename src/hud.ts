@@ -26,7 +26,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 import type { Player } from './player';
-import type { LevelUpManager } from './levelup';
+import { MAX_WEAPON_UPGRADES, type LevelUpManager } from './levelup';
 import type { Weapon } from './weapons';
 import type { Enemy } from './enemies';
 
@@ -489,7 +489,7 @@ export class HUD {
 
       // Level indicator
       ctx.fillStyle = '#ffd740';
-      ctx.fillText(`Lv.${w.level}`, wx + textX, iconY + Math.round(26 * s));
+      ctx.fillText(`U ${Math.max(0, w.level - 1)}/${MAX_WEAPON_UPGRADES}`, wx + textX, iconY + Math.round(26 * s));
 
       wx += iconW + iconGap; // advance to next card position
     }

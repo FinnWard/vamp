@@ -39,7 +39,7 @@ import { EnemySpawner, damageEvents, setDoTChances, setDifficultyMultipliers, se
 import { ProjectilePool } from './projectiles';
 import { GemManager } from './gems';
 import { MagicBolt, createWeaponByName, type AnyWeapon, type Weapon } from './weapons';
-import { LevelUpManager, type Upgrade, type ApplyUpgradeFn } from './levelup';
+import { LevelUpManager, MAX_GENERIC_UPGRADES, MAX_WEAPON_UPGRADES, type Upgrade, type ApplyUpgradeFn } from './levelup';
 import { HUD, drawSpriteToCanvas } from './hud';
 import { AudioManager } from './audio';
 import { DamageNumberPool } from './damage-numbers';
@@ -434,11 +434,12 @@ function showPause(): void {
   pauseWeapons.innerHTML = '';
   for (const perf of getWeaponPerformance(weapons)) {
     const w = perf.weapon;
+    const weaponUpgrades = Math.max(0, w.level - 1);
     const card = document.createElement('div');
     card.className = `pause-weapon-card${w.isEvolution ? ' evolution' : ''}`;
     card.innerHTML = `
       <div class="pause-weapon-name">${w.isEvolution ? '★ ' : ''}${w.name}</div>
-      <div class="pause-weapon-level">Level ${w.level}${w.isEvolution ? '  [EVOLVED]' : ''}</div>
+      <div class="pause-weapon-level">Level ${w.level}${w.isEvolution ? '  [EVOLVED]' : ''} • Upgrades ${weaponUpgrades}/${MAX_WEAPON_UPGRADES}</div>
       <div class="pause-weapon-stats">${w.getStats()}</div>
       <div class="pause-weapon-stats">FIELD PWR ${perf.fieldPower} • E-DPS ${perf.effectiveDps.toFixed(1)} • SHARE ${perf.damageSharePct}%</div>
     `;
@@ -477,7 +478,7 @@ function showPause(): void {
       nameEl.textContent = p.label;
       const stackEl = document.createElement('div');
       stackEl.className = 'pause-powerup-stacks';
-      stackEl.textContent = `×${p.count}`;
+      stackEl.textContent = `${p.count}/${MAX_GENERIC_UPGRADES}`;
       item.appendChild(spriteCanvas);
       item.appendChild(nameEl);
       item.appendChild(stackEl);

@@ -6,7 +6,7 @@
 // 1. The player collects gems, each worth some XP.
 // 2. main.ts passes the total XP gained each frame to LevelUpManager.addXp().
 // 3. When accumulated XP exceeds the threshold for the next level the manager
-//    fires the onLevelUp callback with up to 3 randomly-selected upgrades from
+//    fires the onLevelUp callback with up to 4 randomly-selected upgrades from
 //    the UPGRADE_POOL that are currently available (pass their `requires` check).
 // 4. main.ts pauses gameplay and shows the upgrade cards.  When the player
 //    picks a card, main.ts calls the upgrade's `apply` function and resumes.
@@ -31,7 +31,7 @@
 // ─────
 // Base weapons cap at MAX_BASE_WEAPON_LEVEL (5) so the upgrade pool doesn't
 // offer the same weapon infinitely.  Evolution weapons cap at MAX_EVO_WEAPON_LEVEL
-// (3).  Generic powerups each have their own cap via player.xxxUpgrades counter.
+// (5).  Generic powerups each have their own cap via player.xxxUpgrades counter.
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { shuffle } from './utils';
@@ -47,10 +47,12 @@ const XP_THRESHOLDS = [0, 2, 4, 8, 13, 19, 27, 36, 47, 60] as const;
 
 // ─── Upgrade caps ─────────────────────────────────────────────────────────────
 // Caps prevent any single upgrade path from being taken infinitely.
-const MAX_BASE_WEAPON_LEVEL = 5;   // base weapons: up to 4 upgrades (lv1 → lv5)
-const MAX_EVO_WEAPON_LEVEL  = 3;   // evolved weapons: up to 2 upgrades (lv1 → lv3)
-const MAX_WEAPON_SLOTS      = 4;   // player can hold at most 4 weapons at once
-const MAX_GENERIC_UPGRADES  = 5;   // each generic powerup can stack at most 5 times
+export const MAX_WEAPON_UPGRADES   = 4;                           // any weapon: up to 4 upgrades after unlock
+export const MAX_BASE_WEAPON_LEVEL = MAX_WEAPON_UPGRADES + 1;     // base weapons: lv1 → lv5
+export const MAX_EVO_WEAPON_LEVEL  = MAX_WEAPON_UPGRADES + 1;     // evolved weapons: lv1 → lv5
+export const MAX_WEAPON_SLOTS      = 4;                           // player can hold at most 4 weapons at once
+export const MAX_GENERIC_UPGRADES  = 3;                           // each generic powerup can stack at most 3 times
+const LEVEL_UP_CHOICE_COUNT        = 4;
 
 /**
  * Returns the XP required to reach the given level.
@@ -73,7 +75,7 @@ type RemoveWeaponFn = (name: string) => void;
 
 /**
  * A single entry in the upgrade pool.  Each level-up the manager samples
- * up to 3 available entries from this pool and presents them to the player.
+ * up to 4 available entries from this pool and presents them to the player.
  */
 export interface Upgrade {
   /** Unique string identifier for debugging. */
@@ -682,12 +684,12 @@ export class LevelUpManager {
 
   /**
    * Filters the UPGRADE_POOL to currently available upgrades, shuffles them,
-   * takes 3 (or fewer if not enough are available), and fires the onLevelUp
+   * takes 4 (or fewer if not enough are available), and fires the onLevelUp
    * callback so main.ts can display the upgrade cards.
    */
   private triggerLevelUp(weapons: AnyWeapon[], addWeapon: AddWeaponFn, player: Player, removeWeapon: RemoveWeaponFn): void {
     const available = UPGRADE_POOL.filter(u => u.requires(weapons, player));
-    const choices = shuffle([...available]).slice(0, 3);
+    const choices = shuffle([...available]).slice(0, LEVEL_UP_CHOICE_COUNT);
     if (this.onLevelUp) {
       this.onLevelUp(choices, (choice) => {
         choice.apply(weapons, addWeapon, player, removeWeapon);

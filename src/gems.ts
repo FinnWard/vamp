@@ -31,6 +31,9 @@ const PULL_RADIUS_SQ = PULL_RADIUS * PULL_RADIUS; // squared to avoid sqrt in ho
 /** Gems are collected (disappear and grant XP) once this close. */
 const COLLECT_RADIUS = 30;
 const COLLECT_RADIUS_SQ = COLLECT_RADIUS * COLLECT_RADIUS;
+/** Pickup collectibles use a slightly larger pickup radius so they feel fair. */
+const PICKUP_COLLECT_RADIUS = 34;
+const PICKUP_COLLECT_RADIUS_SQ = PICKUP_COLLECT_RADIUS * PICKUP_COLLECT_RADIUS;
 
 /** Gem compaction kicks in above this count (runs every COMPACT_INTERVAL s). */
 const COMPACT_THRESHOLD = 80;
@@ -38,6 +41,12 @@ const COMPACT_INTERVAL = 0.4;
 
 /** Two gems can merge if their centres are within this squared distance. */
 const MERGE_DIST_SQ = 55 * 55;
+/** Flat heal amount granted by a repair pickup. */
+const HEAL_PICKUP_AMOUNT = 35;
+/** Regular-enemy chance to drop a heal pickup. */
+const HEAL_PICKUP_DROP_CHANCE = 0.035;
+/** Regular-enemy chance to drop a magnet pickup. */
+const MAGNET_PICKUP_DROP_CHANCE = 0.025;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -189,11 +198,70 @@ export class Gem {
   }
 }
 
+type PickupType = 'heal' | 'magnet';
+
+class Pickup {
+  alive = true;
+  private age: number;
+
+  constructor(
+    public x: number,
+    public y: number,
+    public type: PickupType,
+  ) {
+    this.age = randomRange(0, Math.PI * 2);
+  }
+
+  update(dt: number, player: Player): PickupType | null {
+    this.age += dt * 2.4;
+    const dx = player.x - this.x;
+    const dy = player.y - this.y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq < PICKUP_COLLECT_RADIUS_SQ) {
+      this.alive = false;
+      return this.type;
+    }
+    return null;
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, cw: number, ch: number): void {
+    const s = camera.worldToScreen(this.x, this.y);
+    const bob = Math.sin(this.age) * 2;
+    const size = 10;
+    if (s.x < -size || s.x > cw + size || s.y < -size || s.y > ch + size) return;
+
+    ctx.save();
+    if (this.type === 'heal') {
+      ctx.fillStyle = '#69ff74';
+      ctx.shadowColor = '#69ff74';
+      ctx.shadowBlur = 12;
+      ctx.fillRect(s.x - 3, s.y - 8 + bob, 6, 16);
+      ctx.fillRect(s.x - 8, s.y - 3 + bob, 16, 6);
+    } else {
+      ctx.strokeStyle = '#00e5ff';
+      ctx.shadowColor = '#00e5ff';
+      ctx.shadowBlur = 12;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y + bob, 7, Math.PI * 0.15, Math.PI * 0.85);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(s.x, s.y + bob, 7, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.stroke();
+      ctx.fillStyle = '#b2ebf2';
+      ctx.fillRect(s.x - 6, s.y - 6 + bob, 4, 4);
+      ctx.fillRect(s.x + 2, s.y - 6 + bob, 4, 4);
+    }
+    ctx.restore();
+  }
+}
+
 // ─── GemManager ───────────────────────────────────────────────────────────────
 // Owns the full list of live gems and drives their lifecycle.
 
 export class GemManager {
   gems: Gem[] = [];
+  pickups: Pickup[] = [];
 
   /** Accumulates time between compaction passes. */
   private compactTimer = 0;
@@ -208,6 +276,36 @@ export class GemManager {
     const ox = randomRange(-12, 12);
     const oy = randomRange(-12, 12);
     this.gems.push(new Gem(enemy.x + ox, enemy.y + oy, enemy.xpValue));
+  }
+
+  spawnDropsFromEnemy(enemy: { x: number; y: number; xpValue: number; isBoss: boolean }): void {
+    this.spawnFromEnemy(enemy);
+    if (enemy.isBoss) {
+      this.spawnPickup(enemy.x - 16, enemy.y, 'heal');
+      this.spawnPickup(enemy.x + 16, enemy.y, 'magnet');
+      return;
+    }
+    const roll = Math.random();
+    if (roll < HEAL_PICKUP_DROP_CHANCE) {
+      this.spawnPickup(enemy.x, enemy.y, 'heal');
+    } else if (roll < HEAL_PICKUP_DROP_CHANCE + MAGNET_PICKUP_DROP_CHANCE) {
+      this.spawnPickup(enemy.x, enemy.y, 'magnet');
+    }
+  }
+
+  private spawnPickup(x: number, y: number, type: PickupType): void {
+    this.pickups.push(new Pickup(x + randomRange(-10, 10), y + randomRange(-10, 10), type));
+  }
+
+  private collectAllGems(): number {
+    let xp = 0;
+    for (const gem of this.gems) {
+      if (!gem.alive) continue;
+      xp += gem.value;
+      gem.alive = false;
+    }
+    this.gems = this.gems.filter(g => g.alive);
+    return xp;
   }
 
   /**
@@ -263,6 +361,17 @@ export class GemManager {
     }
     // Remove all dead gems (collected or merged) from the live list
     this.gems = this.gems.filter(g => g.alive);
+
+    for (const pickup of this.pickups) {
+      if (!pickup.alive) continue;
+      const effect = pickup.update(dt, player);
+      if (effect === 'heal') {
+        player.hp = Math.min(player.maxHp, player.hp + HEAL_PICKUP_AMOUNT);
+      } else if (effect === 'magnet') {
+        xpGained += this.collectAllGems();
+      }
+    }
+    this.pickups = this.pickups.filter(pickup => pickup.alive);
     return xpGained;
   }
 
@@ -272,6 +381,9 @@ export class GemManager {
     const ch = ctx.canvas.height;
     for (const g of this.gems) {
       g.draw(ctx, camera, cw, ch);
+    }
+    for (const pickup of this.pickups) {
+      pickup.draw(ctx, camera, cw, ch);
     }
   }
 }

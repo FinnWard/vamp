@@ -558,7 +558,7 @@ function update(dt: number): void {
   const dead = spawner.collectDead();
   for (const e of dead) {
     kills++;
-    gems.spawnFromEnemy(e);
+    gems.spawnDropsFromEnemy(e);
     if (e.isBoss) {
       audio.bossDeath();
       bossesDefeated++;

@@ -8,7 +8,7 @@
 //   fast        — small & quick dart-shaped enemy
 //   tank        — large, slow, high HP boss-like enemy
 //   charger     — patrols slowly then dashes at the player in bursts
-//   ranged      — maintains a preferred distance, strafes at close range
+//   ranged      — maintains a preferred distance, strafes, and fires plasma bolts
 //   splitter    — on death splits into two splitterlets
 //   splitterlet — small fast child of the splitter
 //   boss        — massive elite enemy spawning every 120 s; has its own HP bar
@@ -82,6 +82,17 @@ const BOSS_SPAWN_INTERVAL = 120;
 /** Seconds between each DoT damage tick. */
 const DOT_TICK_INTERVAL = 0.5;
 
+/** Speed of the ranged enemy's plasma bolt projectile (world px/s). */
+const RANGED_BOLT_SPEED = 250;
+/** Lifetime of a ranged plasma bolt before it expires. */
+const RANGED_BOLT_LIFETIME = 3.0;
+/** Fraction of the ranged enemy's contact DPS converted into a bolt hit. */
+const RANGED_BOLT_DAMAGE_FACTOR = 0.6;
+/** Minimum seconds between ranged enemy shots. */
+const RANGED_BOLT_COOLDOWN_MIN = 2.0;
+/** Maximum seconds between ranged enemy shots. */
+const RANGED_BOLT_COOLDOWN_MAX = 2.8;
+
 /** Minimum angle (degrees) of the random spawn-direction jitter applied to each enemy. */
 const SPAWN_JITTER_MIN_DEG = 15;
 /** Maximum angle (degrees) of the random spawn-direction jitter applied to each enemy. */
@@ -100,6 +111,51 @@ export interface DamageEvent {
 }
 
 export const damageEvents: DamageEvent[] = [];
+
+class EnemyBolt {
+  alive = true;
+  private age = 0;
+
+  constructor(
+    public x: number,
+    public y: number,
+    private vx: number,
+    private vy: number,
+    private damage: number,
+  ) {}
+
+  update(dt: number, player: Player): void {
+    if (!this.alive) return;
+    this.age += dt;
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    if (this.age >= RANGED_BOLT_LIFETIME) {
+      this.alive = false;
+      return;
+    }
+    if (circlesOverlap(this.x, this.y, 5, player.x, player.y, player.radius)) {
+      player.takeDamage(this.damage);
+      this.alive = false;
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    if (!this.alive) return;
+    const s = camera.worldToScreen(this.x, this.y);
+    ctx.save();
+    ctx.fillStyle = '#80cbc4';
+    ctx.shadowColor = '#b2dfdb';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(s.x - 1, s.y - 1, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
 
 // ─── Module-level DoT chance state (set from main.ts each frame) ──────────────
 
@@ -216,6 +272,12 @@ export class Enemy {
   // ── Ranged-specific preferred distance ───────────────────────────────────
   /** The distance (world px) the ranged enemy tries to maintain from the player. */
   private static readonly RANGED_PREF_DIST = 220;
+  /** Seconds until the ranged enemy can fire again. */
+  private _rangedShotCooldown: number = 0;
+  /** Brief visual flash after firing. */
+  private _rangedShotFlash: number = 0;
+  /** Active plasma bolts fired by this enemy. */
+  private _rangedBolts: EnemyBolt[] = [];
 
   // ── DoT state ─────────────────────────────────────────────────────────────
   /** Remaining seconds of burn damage. 0 = not burning. */
@@ -262,6 +324,9 @@ export class Enemy {
     } else {
       const mag = (SPAWN_JITTER_MIN_DEG + Math.random() * (SPAWN_JITTER_MAX_DEG - SPAWN_JITTER_MIN_DEG)) * Math.PI / 180;
       this._spawnOffsetAngle = Math.random() < 0.5 ? mag : -mag;
+    }
+    if (type === 'ranged') {
+      this._rangedShotCooldown = 0.7 + Math.random() * 0.8;
     }
   }
 
@@ -348,6 +413,12 @@ export class Enemy {
 
     // Advance the spawn-age clock (used to fade out the bearing jitter).
     this._spawnAge += dt;
+    this._rangedShotFlash = Math.max(0, this._rangedShotFlash - dt);
+    if (this.type === 'ranged') {
+      this._rangedShotCooldown -= dt;
+      for (const bolt of this._rangedBolts) bolt.update(dt, player);
+      this._rangedBolts = this._rangedBolts.filter(bolt => bolt.alive);
+    }
 
     // Direction vector toward the player (normalised)
     const dx = player.x - this.x;
@@ -397,7 +468,7 @@ export class Enemy {
     if (this.type === 'charger') {
       this._updateCharger(dt, ndx, ndy);
     } else if (this.type === 'ranged') {
-      this._updateRanged(dt, dist, ndx, ndy);
+      this._updateRanged(dt, player, dist, ndx, ndy);
     } else {
       // Standard homing movement (grunt, fast, tank, splitter, splitterlet, boss)
       const effectiveSpeed = Math.min(this.speed, MAX_ENEMY_SPEED) * this.slowMultiplier;
@@ -454,9 +525,10 @@ export class Enemy {
    * Ranged AI: three zones relative to RANGED_PREF_DIST.
    *   • Too close  (< pref − 30): back away from player.
    *   • Too far    (> pref + 30): advance toward player.
-   *   • Comfortable (within ±30): strafe perpendicular to the player direction.
+   *   • Comfortable (within ±30): strafe perpendicular to the player direction
+   *     and fire occasional plasma bolts at the player.
    */
-  private _updateRanged(dt: number, dist: number, ndx: number, ndy: number): void {
+  private _updateRanged(dt: number, player: Player, dist: number, ndx: number, ndy: number): void {
     const pref = Enemy.RANGED_PREF_DIST;
     let moveMult: number;
     if (dist < pref - 30) {
@@ -470,14 +542,41 @@ export class Enemy {
       moveMult = 0;
       const perpX = -ndy; // 90° rotation of the normalised direction
       const perpY = ndx;
-      const effectiveSpeed = Math.min(this.speed * 0.4, MAX_ENEMY_SPEED) * this.slowMultiplier;
+      const effectiveSpeed = Math.min(this.speed * 0.55, MAX_ENEMY_SPEED) * this.slowMultiplier;
       this.x += perpX * effectiveSpeed * dt;
       this.y += perpY * effectiveSpeed * dt;
+      this._fireRangedBolt(player, dist);
       return; // early out — no forward/backward movement needed
     }
     const effectiveSpeed = Math.min(this.speed, MAX_ENEMY_SPEED) * this.slowMultiplier;
     this.x += ndx * moveMult * effectiveSpeed * dt;
     this.y += ndy * moveMult * effectiveSpeed * dt;
+    this._fireRangedBolt(player, dist);
+  }
+
+  private _fireRangedBolt(player: Player, dist: number): void {
+    if (this._rangedShotCooldown > 0 || dist > Enemy.RANGED_PREF_DIST + 40) return;
+    const dx = player.x - this.x;
+    const dy = player.y - this.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) return;
+    const spread = (Math.random() - 0.5) * 0.12;
+    const cosA = Math.cos(spread);
+    const sinA = Math.sin(spread);
+    const ndx = dx / len;
+    const ndy = dy / len;
+    const shotX = ndx * cosA - ndy * sinA;
+    const shotY = ndx * sinA + ndy * cosA;
+    const boltDamage = Math.max(8, this.damage * RANGED_BOLT_DAMAGE_FACTOR);
+    this._rangedBolts.push(new EnemyBolt(
+      this.x + shotX * (this.radius + 6),
+      this.y + shotY * (this.radius + 6),
+      shotX * RANGED_BOLT_SPEED,
+      shotY * RANGED_BOLT_SPEED,
+      boltDamage,
+    ));
+    this._rangedShotCooldown = randomRange(RANGED_BOLT_COOLDOWN_MIN, RANGED_BOLT_COOLDOWN_MAX);
+    this._rangedShotFlash = 0.2;
   }
 
   // ── Rendering ──────────────────────────────────────────────────────────────
@@ -488,6 +587,9 @@ export class Enemy {
    */
   draw(ctx: CanvasRenderingContext2D, camera: Camera): void {
     if (!this.alive) return;
+    if (this.type === 'ranged') {
+      for (const bolt of this._rangedBolts) bolt.draw(ctx, camera);
+    }
     const s = camera.worldToScreen(this.x, this.y);
 
     ctx.save();
@@ -676,7 +778,9 @@ export class Enemy {
     const main  = this.variant === 1 ? '#004d40' : '#00695c';
     const light = this.variant === 1 ? '#00897b' : '#26a69a';
     const tip   = this.variant === 1 ? '#80cbc4' : '#b2dfdb';
-    const core  = this.variant === 1 ? '#e0f2f1' : '#ffffff';
+    const core  = this._rangedShotFlash > 0
+      ? '#fff59d'
+      : this.variant === 1 ? '#e0f2f1' : '#ffffff';
     // Outer hexagon approximated with rects
     ctx.fillStyle = main;
     ctx.fillRect(-4, -13, 8, 4);

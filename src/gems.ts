@@ -44,9 +44,7 @@ const MERGE_DIST_SQ = 55 * 55;
 /** Flat heal amount granted by a repair pickup. */
 const HEAL_PICKUP_AMOUNT = 35;
 /** Regular-enemy chance to drop a heal pickup. */
-const HEAL_PICKUP_DROP_CHANCE = 0.035;
-/** Regular-enemy chance to drop a magnet pickup. */
-const MAGNET_PICKUP_DROP_CHANCE = 0.025;
+const HEAL_PICKUP_DROP_CHANCE = 0.015;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -285,11 +283,8 @@ export class GemManager {
       this.spawnPickup(enemy.x + 16, enemy.y, 'magnet');
       return;
     }
-    const roll = Math.random();
-    if (roll < HEAL_PICKUP_DROP_CHANCE) {
+    if (Math.random() < HEAL_PICKUP_DROP_CHANCE) {
       this.spawnPickup(enemy.x, enemy.y, 'heal');
-    } else if (roll < HEAL_PICKUP_DROP_CHANCE + MAGNET_PICKUP_DROP_CHANCE) {
-      this.spawnPickup(enemy.x, enemy.y, 'magnet');
     }
   }
 

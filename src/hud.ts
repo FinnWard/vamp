@@ -246,6 +246,36 @@ const WEAPON_SPRITE_GRIDS: Record<string, string[]> = {
     '.122221.',
     '..1111..',
   ],
+  'Static Bloom': [
+    '..11..1.',
+    '.111.11.',
+    '11122111',
+    '.112211.',
+    '11122111',
+    '.111.11.',
+    '..11..1.',
+    '....1...',
+  ],
+  'Graviton Veil': [
+    '.111111.',
+    '12....21',
+    '1.1221.1',
+    '1.2112.1',
+    '1.2112.1',
+    '1.1221.1',
+    '12....21',
+    '.111111.',
+  ],
+  'Volt Whorl': [
+    '1..1..11',
+    '.1.1.11.',
+    '..1111..',
+    '11122111',
+    '11122111',
+    '..1111..',
+    '.11.1.1.',
+    '11..1..1',
+  ],
 };
 
 /**
@@ -275,6 +305,9 @@ const WEAPON_SPRITE_COLORS: Record<string, [string, string]> = {
   'Cryo Lash':       ['#80d8ff', '#b2ebf2'],
   'Aegis Array':     ['#90caf9', '#fff9c4'],
   'Cataclysm Core':  ['#ff80ab', '#f8bbd0'],
+  'Static Bloom':    ['#b388ff', '#ffab40'],
+  'Graviton Veil':   ['#ce93d8', '#80cbc4'],
+  'Volt Whorl':      ['#ffd740', '#b2ebf2'],
 };
 
 // ─── Pixel sprite definitions for generic powerups (8×8 grid) ─────────────────

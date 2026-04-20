@@ -45,6 +45,10 @@ const MERGE_DIST_SQ = 55 * 55;
 const HEAL_PICKUP_AMOUNT = 35;
 /** Regular-enemy chance to drop a heal pickup. */
 const HEAL_PICKUP_DROP_CHANCE = 0.015;
+/** Magnet pickup duration for global gem attraction. */
+const MAGNET_PULL_DURATION = 5.0;
+/** Gem pull speed while a magnet is active. */
+const MAGNET_PULL_SPEED = 520;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -124,7 +128,7 @@ export class Gem {
    * The effective pull radius uses the larger of the base constant and the
    * player's (possibly upgraded) pickupRadius.
    */
-  update(dt: number, player: Player): void {
+  update(dt: number, player: Player, magnetActive = false): void {
     this.age += dt * 2; // bob oscillation speed
 
     const dx = player.x - this.x;
@@ -139,9 +143,9 @@ export class Gem {
 
     // Fly toward player if within the pull zone (respects pickup radius upgrades)
     const pullRadiusSq = Math.max(PULL_RADIUS_SQ, player.pickupRadius * player.pickupRadius);
-    if (distSq < pullRadiusSq) {
+    if (magnetActive || distSq < pullRadiusSq) {
       const dist = Math.sqrt(distSq);
-      const speed = 200; // world px/s
+      const speed = magnetActive ? MAGNET_PULL_SPEED : 200; // world px/s
       this.x += (dx / dist) * speed * dt;
       this.y += (dy / dist) * speed * dt;
     }
@@ -260,6 +264,7 @@ class Pickup {
 export class GemManager {
   gems: Gem[] = [];
   pickups: Pickup[] = [];
+  private magnetTimer = 0;
 
   /** Accumulates time between compaction passes. */
   private compactTimer = 0;
@@ -290,17 +295,6 @@ export class GemManager {
 
   private spawnPickup(x: number, y: number, type: PickupType): void {
     this.pickups.push(new Pickup(x + randomRange(-10, 10), y + randomRange(-10, 10), type));
-  }
-
-  private collectAllGems(): number {
-    let xp = 0;
-    for (const gem of this.gems) {
-      if (!gem.alive) continue;
-      xp += gem.value;
-      gem.alive = false;
-    }
-    this.gems = this.gems.filter(g => g.alive);
-    return xp;
   }
 
   /**
@@ -340,6 +334,8 @@ export class GemManager {
    * Also triggers compaction when the gem count is high.
    */
   update(dt: number, player: Player): number {
+    this.magnetTimer = Math.max(0, this.magnetTimer - dt);
+
     // Rate-limit compaction so it doesn't run every frame
     this.compactTimer += dt;
     if (this.gems.length > COMPACT_THRESHOLD && this.compactTimer >= COMPACT_INTERVAL) {
@@ -350,7 +346,7 @@ export class GemManager {
     let xpGained = 0;
     for (const g of this.gems) {
       if (!g.alive) continue;
-      g.update(dt, player);
+      g.update(dt, player, this.magnetTimer > 0);
       // If the gem was collected inside update(), sum its value
       if (!g.alive) xpGained += g.value;
     }
@@ -363,7 +359,7 @@ export class GemManager {
       if (effect === 'heal') {
         player.hp = Math.min(player.maxHp, player.hp + HEAL_PICKUP_AMOUNT);
       } else if (effect === 'magnet') {
-        xpGained += this.collectAllGems();
+        this.magnetTimer = Math.max(this.magnetTimer, MAGNET_PULL_DURATION);
       }
     }
     this.pickups = this.pickups.filter(pickup => pickup.alive);

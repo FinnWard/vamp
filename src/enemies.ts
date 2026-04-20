@@ -1142,19 +1142,48 @@ export class EnemySpawner {
   }
 
   /**
-   * Picks an enemy type weighted by elapsed time.
-   * Later enemy types unlock at specific time thresholds and have a growing
-   * probability of appearing until they reach their target frequency.
+   * Picks an enemy type using stage-specific weights.
+   * Each stage keeps access to simpler enemies, but its signature archetypes get
+   * much heavier weighting so the stage identity is obvious in play.
    */
   private pickType(): EnemyType {
-    const roll = Math.random();
-    if (_enemyStage >= 4 && this.elapsed > 120 && roll < 0.08) return 'ranged';
-    if (_enemyStage >= 4 && this.elapsed > 135 && roll < 0.14) return 'miner';
-    if (_enemyStage >= 3 && this.elapsed > 90  && roll < 0.12) return 'splitter';
-    if (_enemyStage >= 2 && this.elapsed > 60  && roll < 0.18) return 'charger';
-    if (this.elapsed > 50  && roll < 0.28) return 'tank';
-    if (this.elapsed > 12  && roll < 0.42) return 'fast';
-    return 'grunt';
+    const weights: Array<[EnemyType, number]> = [];
+    const addWeight = (type: EnemyType, weight: number, unlocked: boolean): void => {
+      if (unlocked && weight > 0) weights.push([type, weight]);
+    };
+
+    if (_enemyStage <= 1) {
+      addWeight('grunt', 44, true);
+      addWeight('fast', 32, this.elapsed > 8);
+      addWeight('tank', 24, this.elapsed > 35);
+    } else if (_enemyStage === 2) {
+      addWeight('grunt', 16, true);
+      addWeight('fast', 22, this.elapsed > 8);
+      addWeight('tank', 18, this.elapsed > 35);
+      addWeight('charger', 44, this.elapsed > 25);
+    } else if (_enemyStage === 3) {
+      addWeight('grunt', 8, true);
+      addWeight('fast', 12, this.elapsed > 8);
+      addWeight('tank', 12, this.elapsed > 35);
+      addWeight('charger', 16, this.elapsed > 25);
+      addWeight('splitter', 52, this.elapsed > 35);
+    } else {
+      addWeight('grunt', 4, true);
+      addWeight('fast', 8, this.elapsed > 8);
+      addWeight('tank', 10, this.elapsed > 35);
+      addWeight('charger', 12, this.elapsed > 25);
+      addWeight('splitter', 24, this.elapsed > 35);
+      addWeight('ranged', 20, this.elapsed > 45);
+      addWeight('miner', 22, this.elapsed > 70);
+    }
+
+    const totalWeight = weights.reduce((sum, [, weight]) => sum + weight, 0);
+    let roll = Math.random() * totalWeight;
+    for (const [type, weight] of weights) {
+      roll -= weight;
+      if (roll <= 0) return type;
+    }
+    return weights[weights.length - 1]?.[0] ?? 'grunt';
   }
 
   /**

@@ -82,6 +82,7 @@ function saveHighScore(kills: number): void {
 
 // ─── Last-run stats (Feature 12) ──────────────────────────────────────────────
 const LAST_RUN_KEY = 'vamp_last_run';
+const DISCOVERED_MERGES_KEY = 'vamp_discovered_merges';
 
 interface LastRunData {
   elapsed: number;
@@ -95,11 +96,29 @@ function saveLastRun(data: LastRunData): void {
   try { localStorage.setItem(LAST_RUN_KEY, JSON.stringify(data)); } catch { /* ignore */ }
 }
 
+function loadDiscoveredMerges(): Set<string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DISCOVERED_MERGES_KEY) ?? '[]');
+    return new Set(Array.isArray(raw) ? raw.filter((entry): entry is string => typeof entry === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDiscoveredMerges(discovered: Set<string>): void {
+  try {
+    localStorage.setItem(DISCOVERED_MERGES_KEY, JSON.stringify([...discovered].sort()));
+  } catch {
+    // storage unavailable
+  }
+}
+
 // ─── GameState ────────────────────────────────────────────────────────────────
 type GameState = 'title' | 'difficulty' | 'playing' | 'levelup' | 'gameover' | 'paused';
 let state: GameState = 'title';
 type PauseView = 'run' | 'logbook';
 let pauseView: PauseView = 'run';
+const discoveredMerges = loadDiscoveredMerges();
 
 // ─── Stage progression ────────────────────────────────────────────────────────
 interface StageConfig {
@@ -227,6 +246,10 @@ function addWeapon(name: string): void {
   if (!weapons.some(w => w.name === name)) {
     const w = createWeaponByName(name);
     if (w) {
+      if (w.isEvolution) {
+        discoveredMerges.add(w.name);
+        saveDiscoveredMerges(discoveredMerges);
+      }
       w.activeTimeSeconds = 0;
       w.scaleStats(player.attackSpeedMult, player.damageMult);
       weapons.push(w);
@@ -489,27 +512,49 @@ function renderPauseLogbook(): void {
   for (const entry of LOGBOOK_MERGES) {
     const card = document.createElement('div');
     const active = currentWeapons.has(entry.result);
-    const ready = !active && entry.ingredients.every((ingredient) => (currentWeapons.get(ingredient.name) ?? 0) >= ingredient.level);
-    card.className = `pause-logbook-card${active ? ' current' : ''}${ready ? ' ready' : ''}`;
-    const recipe = entry.ingredients.map((ingredient) => `${ingredient.name} LV ${ingredient.level}`).join(' + ');
+    const discovered = active || discoveredMerges.has(entry.result);
+    const ready = discovered && !active && entry.ingredients.every((ingredient) => (currentWeapons.get(ingredient.name) ?? 0) >= ingredient.level);
+    card.className = `pause-logbook-card${discovered ? '' : ' mystery'}${active ? ' current' : ''}${ready ? ' ready' : ''}`;
     const top = document.createElement('div');
     top.className = 'pause-logbook-top';
-    top.appendChild(createPauseSprite(entry.result, 'pause-logbook-sprite'));
+    if (discovered) {
+      top.appendChild(createPauseSprite(entry.result, 'pause-logbook-sprite'));
+    } else {
+      const mysteryIcon = document.createElement('div');
+      mysteryIcon.className = 'pause-logbook-mystery-icon';
+      mysteryIcon.textContent = '?';
+      top.appendChild(mysteryIcon);
+    }
     const titleWrap = document.createElement('div');
+    if (discovered) {
+      const recipe = entry.ingredients.map((ingredient) => `${ingredient.name} LV ${ingredient.level}`).join(' + ');
+      titleWrap.innerHTML = `
+        <div class="pause-logbook-name">★ ${entry.result}</div>
+        <div class="pause-logbook-status">${active ? 'ACTIVE NOW' : ready ? 'READY TO MERGE' : 'DISCOVERED MERGE'}</div>
+      `;
+      const desc = document.createElement('div');
+      desc.className = 'pause-logbook-desc';
+      desc.textContent = entry.desc;
+      const recipeEl = document.createElement('div');
+      recipeEl.className = 'pause-logbook-recipe';
+      recipeEl.textContent = `${recipe}  →  ${entry.result}`;
+      card.appendChild(top);
+      top.appendChild(titleWrap);
+      card.appendChild(desc);
+      card.appendChild(recipeEl);
+      mergeGrid.appendChild(card);
+      continue;
+    }
     titleWrap.innerHTML = `
-      <div class="pause-logbook-name">★ ${entry.result}</div>
-      <div class="pause-logbook-status">${active ? 'ACTIVE NOW' : ready ? 'READY TO MERGE' : 'MERGE RECIPE'}</div>
+      <div class="pause-logbook-name">★ ???</div>
+      <div class="pause-logbook-status">UNDISCOVERED MERGE</div>
     `;
     top.appendChild(titleWrap);
     const desc = document.createElement('div');
     desc.className = 'pause-logbook-desc';
-    desc.textContent = entry.desc;
-    const recipeEl = document.createElement('div');
-    recipeEl.className = 'pause-logbook-recipe';
-    recipeEl.textContent = `${recipe}  →  ${entry.result}`;
+    desc.textContent = 'A hidden combination is still waiting to be found.';
     card.appendChild(top);
     card.appendChild(desc);
-    card.appendChild(recipeEl);
     mergeGrid.appendChild(card);
   }
   mergeSection.appendChild(mergeGrid);

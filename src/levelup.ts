@@ -40,10 +40,11 @@ import type { Player } from "./player";
 
 // ─── XP thresholds ────────────────────────────────────────────────────────────
 
-// XP required per level — tuned for ~5 minute runs.
-// Indices 1-9 are hand-tuned early levels; beyond index 9 a formula generates
-// thresholds that grow by 75 XP per level to keep mid/late-game pacing smooth.
-const XP_THRESHOLDS = [0, 2, 4, 8, 13, 19, 27, 36, 47, 60] as const;
+// XP required per level — tuned so a run that previously landed around level 20
+// now lands closer to level 30.
+// Indices 1-9 are hand-tuned early levels; beyond index 9 a flatter formula
+// keeps progression moving so more builds can come online in a run.
+const XP_THRESHOLDS = [0, 2, 3, 6, 10, 15, 21, 28, 36, 45] as const;
 
 // ─── Upgrade caps ─────────────────────────────────────────────────────────────
 // Caps prevent any single upgrade path from being taken infinitely.
@@ -209,14 +210,11 @@ export const LOGBOOK_MERGES: LogbookMergeEntry[] = [
 /**
  * Returns the XP required to reach the given level.
  * For levels within the hand-tuned table, returns the table value directly.
- * For levels beyond the table, continues with a +75 XP / level formula.
+ * For levels beyond the table, continues with a flatter +18 XP / level formula.
  */
 function xpForLevel(level: number): number {
   if (level < XP_THRESHOLDS.length) return XP_THRESHOLDS[level] ?? 0;
-  return (
-    (XP_THRESHOLDS[XP_THRESHOLDS.length - 1] ?? 0) +
-    (level - XP_THRESHOLDS.length + 1) * 75
-  );
+  return 70 + (level - XP_THRESHOLDS.length) * 18;
 }
 
 // ─── Callback type aliases ─────────────────────────────────────────────────────
@@ -1243,55 +1241,6 @@ const UPGRADE_POOL: Upgrade[] = [
       player.armorUpgrades++;
     },
     requires: (_w, player) => player.armorUpgrades < MAX_GENERIC_UPGRADES,
-  },
-  // ── Burn Catalyst ──────────────────────────────────────────────────────────
-  {
-    id: "gen_burn_1",
-    label: "🔥 Burn Catalyst I",
-    desc: "+30% chance to ignite enemies on hit",
-    icon: "burn",
-    apply: (_w, _add, player) => {
-      player.burnChance += 0.3;
-      player.burnUpgrades++;
-    },
-    requires: (_w, player) => player.burnUpgrades < MAX_GENERIC_UPGRADES,
-  },
-  {
-    id: "gen_burn_2",
-    label: "🔥 Burn Catalyst II",
-    desc: "+30% burn chance (stacks)",
-    icon: "burn",
-    apply: (_w, _add, player) => {
-      player.burnChance += 0.3;
-      player.burnUpgrades++;
-    },
-    requires: (_w, player) =>
-      player.burnUpgrades >= 1 && player.burnUpgrades < MAX_GENERIC_UPGRADES,
-  },
-  // ── Toxin Core ─────────────────────────────────────────────────────────────
-  {
-    id: "gen_poison_1",
-    label: "☠ Toxin Core I",
-    desc: "+30% chance to poison enemies on hit",
-    icon: "poison",
-    apply: (_w, _add, player) => {
-      player.poisonChance += 0.3;
-      player.poisonUpgrades++;
-    },
-    requires: (_w, player) => player.poisonUpgrades < MAX_GENERIC_UPGRADES,
-  },
-  {
-    id: "gen_poison_2",
-    label: "☠ Toxin Core II",
-    desc: "+30% poison chance (stacks)",
-    icon: "poison",
-    apply: (_w, _add, player) => {
-      player.poisonChance += 0.3;
-      player.poisonUpgrades++;
-    },
-    requires: (_w, player) =>
-      player.poisonUpgrades >= 1 &&
-      player.poisonUpgrades < MAX_GENERIC_UPGRADES,
   },
   // ── Gravity Well weapon ────────────────────────────────────────────────────
   {

@@ -379,7 +379,8 @@
       .pause-logbook-status { font-size: 0.34rem; }
       .pause-powerup-item { width: 72px; padding: 6px 8px; }
       .pause-powerup-name { font-size: 0.28rem; }
-      #resumeBtn         { font-size: 0.55rem; padding: 10px 24px; }
+      #resumeBtn,
+      #retireBtn         { font-size: 0.55rem; padding: 10px 24px; }
       #restartBtn        { font-size: 0.55rem; padding: 10px 24px; }
       #gameOverOverlay h1 { font-size: 1.2rem; }
       #gameOverStats     { font-size: 0.5rem; }
@@ -571,6 +572,13 @@
       color: #b2ebf2;
     }
 
+    .pause-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+    }
+
     #resumeBtn {
       padding: 12px 36px;
       background: #0d1b4b;
@@ -585,6 +593,24 @@
 
     #resumeBtn:hover {
       background: #00e5ff;
+      color: #000;
+      transform: scale(1.04);
+    }
+
+    #retireBtn {
+      padding: 12px 36px;
+      background: #2a0b18;
+      color: #ff8a80;
+      border: 2px solid #ff5252;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 0.65rem;
+      cursor: pointer;
+      letter-spacing: 2px;
+      transition: background 0.1s, transform 0.1s;
+    }
+
+    #retireBtn:hover {
+      background: #ff5252;
       color: #000;
       transform: scale(1.04);
     }
@@ -702,7 +728,10 @@
       <div id="pausePowerups"></div>
     </div>
     <div id="pauseLogbook" class="pause-panel hidden"></div>
-    <button id="resumeBtn">RESUME</button>
+    <div class="pause-actions">
+      <button id="resumeBtn">RESUME</button>
+      <button id="retireBtn">RETIRE RUN</button>
+    </div>
   </div>
 
   <!-- Level-up overlay -->

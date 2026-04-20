@@ -258,6 +258,7 @@ const pauseStats        = document.getElementById('pauseStats')!;
 const pauseWeapons      = document.getElementById('pauseWeapons')!;
 const pausePowerups     = document.getElementById('pausePowerups')!;
 const resumeBtn         = document.getElementById('resumeBtn')!;
+const retireBtn         = document.getElementById('retireBtn') as HTMLButtonElement;
 const menuBtn           = document.getElementById('menuBtn')!;
 const muteBtn           = document.getElementById('muteBtn')!;
 const highScoreDisplay  = document.getElementById('highScoreDisplay')!;
@@ -382,7 +383,10 @@ function hideLevelUpUI(): void {
 
 // ─── Game Over UI ─────────────────────────────────────────────────────────────
 function showGameOver(): void {
+  state = 'gameover';
+  pauseOverlay.classList.add('hidden');
   menuBtn.classList.add('hidden');
+  menuBtn.textContent = '⏸';
   audio.gameOver();
 
   const mins = Math.floor(elapsed / 60);
@@ -552,8 +556,6 @@ function showPause(): void {
     { key: 'shield_cap',   label: 'SHIELD CAP',      count: player.hpUpgrades        },
     { key: 'armor',        label: 'TI PLATING',      count: player.armorUpgrades     },
     { key: 'tractor_beam', label: 'TRACTOR BEAM',    count: player.pickupUpgrades    },
-    { key: 'burn',         label: 'BURN CATALYST',   count: player.burnUpgrades      },
-    { key: 'poison',       label: 'TOXIN CORE',      count: player.poisonUpgrades    },
   ];
   const activePowerups = powerupDefs.filter(p => p.count > 0);
   if (activePowerups.length > 0) {
@@ -600,6 +602,7 @@ pauseRunTab.addEventListener('click', () => setPauseView('run'));
 pauseLogbookTab.addEventListener('click', () => setPauseView('logbook'));
 
 resumeBtn.addEventListener('click', hidePause);
+retireBtn.addEventListener('click', showGameOver);
 
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape' || e.code === 'KeyP') {

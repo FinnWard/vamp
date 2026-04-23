@@ -25,6 +25,15 @@
 // recovers toward 1.0 at a fixed rate each frame (1.5 × dt per second).
 // All movement calculations multiply speed by this value.
 //
+// Stale-enemy despawn
+// ────────────────────
+// Each enemy tracks how many seconds have passed since it last touched the
+// player (timeSinceContact).  The timer resets to 0 on every frame that the
+// enemy overlaps the player.  If a non-boss enemy goes STALE_DESPAWN_TIME
+// seconds without any contact it is quietly removed (alive set to false).
+// This prevents the "blob" from accumulating indefinitely while the player
+// kites, and creates a natural pacing rhythm.
+//
 // DoT mechanic
 // ─────────────
 // Call applyBurn() or applyPoison() to start a damage-over-time effect.
@@ -110,6 +119,13 @@ const SPAWN_JITTER_MIN_DEG = 15;
 const SPAWN_JITTER_MAX_DEG = 25;
 /** Seconds over which the spawn-direction jitter linearly fades to zero. */
 const SPAWN_FAN_DURATION = 2.0;
+
+/**
+ * Seconds a non-boss enemy may exist without touching the player before it is
+ * quietly despawned.  Keeps the on-screen blob from growing indefinitely when
+ * the player kites.
+ */
+const STALE_DESPAWN_TIME = 50;
 
 // ─── Damage event bus ─────────────────────────────────────────────────────────
 
@@ -372,6 +388,12 @@ export class Enemy {
   /** Countdown to next poison tick. */
   private _poisonTickTimer: number = 0;
 
+  // ── Stale-despawn state ───────────────────────────────────────────────────
+  /** Total seconds this enemy has been alive. */
+  age: number = 0;
+  /** Seconds since this enemy last overlapped the player.  Resets on contact. */
+  private _timeSinceContact: number = 0;
+
   constructor(x: number, y: number, type: EnemyType = 'grunt', hpMultiplier: number = 1) {
     this.x = x;
     this.y = y;
@@ -455,9 +477,15 @@ export class Enemy {
    * Dispatches to the appropriate AI handler based on type, then checks for
    * player overlap and applies contact damage.  Contact damage is multiplied
    * by dt so it represents "damage per second" even though it's applied every frame.
+   * Non-boss enemies that have gone STALE_DESPAWN_TIME seconds without touching
+   * the player are quietly removed to prevent blob accumulation while kiting.
    */
   update(dt: number, player: Player, allEnemies: Enemy[], spawnMine?: (x: number, y: number, damage: number) => boolean): void {
     if (!this.alive) return;
+
+    // ── Age / stale-despawn tracking ─────────────────────────────────────────
+    this.age += dt;
+    this._timeSinceContact += dt;
 
     // ── DoT tick processing ──────────────────────────────────────────────────
     if (this.burnTimer > 0) {
@@ -564,9 +592,17 @@ export class Enemy {
     this.x += rnx * repSpeed * dt;
     this.y += rny * repSpeed * dt;
 
-    // Contact damage: applied as long as the enemy overlaps the player
+    // Contact damage: applied as long as the enemy overlaps the player.
+    // Touching the player resets the stale-despawn timer.
     if (circlesOverlap(this.x, this.y, this.radius, player.x, player.y, player.radius)) {
       player.takeDamage(this.damage * dt);
+      this._timeSinceContact = 0;
+    }
+
+    // Stale despawn: remove non-boss enemies that have gone too long without
+    // touching the player (they are drifting off-screen or far behind the kite).
+    if (!this.isBoss && this._timeSinceContact > STALE_DESPAWN_TIME) {
+      this.alive = false;
     }
   }
 
